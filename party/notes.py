@@ -12,7 +12,7 @@ from dateutil.parser import parse
 from loguru import logger
 from requests.adapters import HTTPAdapter
 
-from requests.exceptions import RetryError
+from requests.exceptions import HTTPError, RetryError
 from tqdm import tqdm
 from urllib3.util.retry import Retry
 from urllib3.exceptions import MaxRetryError
@@ -70,7 +70,7 @@ def pull_user(
     base_url: str = "https://kemono.party",
     include_files: bool = False,
     exclude_external: bool = True,
-    limit: int = None
+    limit: int = None,
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -90,21 +90,21 @@ def pull_user(
         if include_files
         else x["attachments"]
     )
-    # files = [
-    #     i
-    #     for p in populate_posts(f"{base_url}/api/{service}/user/{user_id}")
-    #     for i in file_generator(p)
-    #     if i
-    # ]
     files = []
-    for n, p in enumerate(populate_posts(f"{base_url}/api/{service}/user/{user_id}")):
-        for i in file_generator(p):
+    for num, post in enumerate(
+        populate_posts(f"{base_url}/api/{service}/user/{user_id}")
+    ):
+        for i in file_generator(post):
             if i:
                 files.append(i)
-        if limit and n == limit:
+        if limit and num == limit:
             break
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
+    else:
+        for i in files:
+            if "//" in i["name"]:
+                i["name"] = i["name"].split("/").pop()
     with tqdm(total=len(files)) as pbar:
         session = requests.session()
         retry = Retry(total=5, backoff_factor=2, status_forcelist=[429])
@@ -126,7 +126,7 @@ def pull_user(
                     if "last-modified" in resp.headers:
                         date = parse(resp.headers["last-modified"])
                         os.utime(filename, (date.timestamp(), date.timestamp()))
-                except (FileNotFoundError, MaxRetryError, RetryError) as err:
+                except (FileNotFoundError, HTTPError, MaxRetryError, RetryError) as err:
                     logger.debug(err)
             pbar.update(1)
 
