@@ -20,7 +20,15 @@ from urllib3.exceptions import MaxRetryError
 APP = typer.Typer()
 
 
-def generate_user_data(service, user_id, base_url):
+def generate_user_data(service: str, user_id: str | int, base_url: str) -> (str, int):
+    """Filter through a list of users, find by either id or name
+    Args:
+        service: Ex. patreon, fanbox, fantia
+        user_id: Either string or int, to match name or id
+        base_url: usually https://kemono.party
+    Return:
+        (name, id): plain text name and int id for harvest
+    """
     users = requests.get(f"{base_url}/api/creators").json()
     try:
         int(user_id)
@@ -39,20 +47,20 @@ def generate_user_data(service, user_id, base_url):
     return user, user_id
 
 
-def populate_posts(url):
-    # posts = []
+def populate_posts(url, total: int = None):
+    count = 0
     offset = 0
     while True:
         resp = requests.get(url, params=dict(o=offset)).json()
-        # files.extend([i for p in resp for i in p["attachments"]])
-        # posts.extend(resp)
         for post in resp:
+            count += 1
             yield post
+            if total and count >= total:
+                break
         if len(resp) > 0:
             offset += 25
         else:
             break
-    # return posts
 
 
 @APP.command(name="kemono")
@@ -62,7 +70,16 @@ def pull_user(
     base_url: str = "https://kemono.party",
     include_files: bool = False,
     exclude_external: bool = True,
+    limit: int = None
 ):
+    """Quick download command for kemono.party
+    Attrs:
+        service: Ex. patreon, fantia, onlyfans
+        user_id: either name or id of the user
+        base_url: Swapable for coomer.party
+        include_files: add post['file'] to downloads
+        exclude_external: filter out files not hosted on *.party
+    """
     user, user_id = generate_user_data(service, user_id, base_url)
     if not os.path.exists(user):
         os.mkdir(user)
@@ -73,12 +90,19 @@ def pull_user(
         if include_files
         else x["attachments"]
     )
-    files = [
-        i
-        for p in populate_posts(f"{base_url}/api/{service}/user/{user_id}")
-        for i in file_generator(p)
-        if i
-    ]
+    # files = [
+    #     i
+    #     for p in populate_posts(f"{base_url}/api/{service}/user/{user_id}")
+    #     for i in file_generator(p)
+    #     if i
+    # ]
+    files = []
+    for n, p in enumerate(populate_posts(f"{base_url}/api/{service}/user/{user_id}")):
+        for i in file_generator(p):
+            if i:
+                files.append(i)
+        if limit and n == limit:
+            break
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
     with tqdm(total=len(files)) as pbar:
@@ -97,17 +121,13 @@ def pull_user(
                     if resp.status_code != 200:
                         logger.info(resp.status_code)
                     resp.raise_for_status()
-                    # try:
                     with open(filename, "wb") as output:
                         shutil.copyfileobj(resp.raw, output)
                     if "last-modified" in resp.headers:
                         date = parse(resp.headers["last-modified"])
                         os.utime(filename, (date.timestamp(), date.timestamp()))
-                    # except KeyboardInterrupt as e:
-                    # os.remove(filename)
-                    # raise e
-                except (FileNotFoundError, MaxRetryError, RetryError) as e:
-                    logger.debug(e)
+                except (FileNotFoundError, MaxRetryError, RetryError) as err:
+                    logger.debug(err)
             pbar.update(1)
 
         with ThreadPoolExecutor(10) as pool:
@@ -117,6 +137,7 @@ def pull_user(
 
 @APP.command()
 def coomer(user_id: str):
+    """Convenience command for running against coomer, Onlyfans"""
     base = "https://coomer.party"
     service = "onlyfans"
     pull_user(service, user_id, base)

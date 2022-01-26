@@ -22,6 +22,7 @@ tqdm = "^4.62.3"
 python-dateutil = "^2.8.2"
 typer = "^0.4.0"
 loguru = "^0.5.3"
+marshmallow = "^3.14.1"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
