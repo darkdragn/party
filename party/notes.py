@@ -1,18 +1,22 @@
 #!/usr/bin/env python
 """Quick notes on pulling from kemono.party"""
 
+import asyncio
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 
+import aiofiles
+import aiohttp
 import requests
 import typer
+
 from dateutil.parser import parse
 from loguru import logger
 from requests.adapters import HTTPAdapter
 
-from requests.exceptions import RetryError
+from requests.exceptions import HTTPError, RetryError
 from tqdm import tqdm
 from urllib3.util.retry import Retry
 from urllib3.exceptions import MaxRetryError
@@ -91,15 +95,11 @@ def pull_user(
         if include_files
         else x["attachments"]
     )
-    # files = [
-    #     i
-    #     for p in populate_posts(f"{base_url}/api/{service}/user/{user_id}")
-    #     for i in file_generator(p)
-    #     if i
-    # ]
     files = []
-    for n, p in enumerate(populate_posts(f"{base_url}/api/{service}/user/{user_id}")):
-        for i in file_generator(p):
+    for num, post in enumerate(
+        populate_posts(f"{base_url}/api/{service}/user/{user_id}")
+    ):
+        for i in file_generator(post):
             if i:
                 if post_id:
                     i['name'] = p['id'] + '_' + i['name']
@@ -110,35 +110,64 @@ def pull_user(
             break
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
+    else:
+        for i in files:
+            if "//" in i["name"]:
+                i["name"] = i["name"].split("/").pop()
     with tqdm(total=len(files)) as pbar:
-        session = requests.session()
-        retry = Retry(total=5, backoff_factor=2, status_forcelist=[429])
-        adapter = HTTPAdapter(max_retries=retry)
-        session.mount("https://", adapter)
+        # download_threaded(pbar, base_url, user, files)
+        asyncio.run(download_async(pbar, base_url, user, files))
 
-        def download(f):
+async def download_async(pbar, base_url, user, files):
+    async with aiohttp.ClientSession(base_url) as session:
+        semaphore = asyncio.Semaphore(15)
+        async def download(f, session):
             filename = f"{user}/{f['name']}"
             if os.path.exists(filename):
-                pass
-            else:
-                try:
-                    resp = session.get(f"{base_url}/{f['path']}", stream=True)
-                    if resp.status_code != 200:
-                        logger.info(resp.status_code)
-                    resp.raise_for_status()
-                    with open(filename, "wb") as output:
-                        shutil.copyfileobj(resp.raw, output)
-                    if "last-modified" in resp.headers:
-                        date = parse(resp.headers["last-modified"])
+                pbar.update(1)
+                return
+            async with semaphore:
+                async with session.get(f['path']) as resp:
+                    async with aiofiles.open(filename, "wb") as output:
+                        async for data in resp.content.iter_chunked(64 * 1024):
+                            await output.write(data)
+                    if 'last-modified' in resp.headers:
+                        date = parse(resp.headers['last-modified'])
                         os.utime(filename, (date.timestamp(), date.timestamp()))
-                except (FileNotFoundError, MaxRetryError, RetryError) as err:
-                    logger.debug(err)
             pbar.update(1)
+        downloads = [download(f, session) for f in files]
+        await asyncio.gather(*downloads)
 
-        with ThreadPoolExecutor(10) as pool:
-            for _ in pool.map(download, files):
-                pass
+    # pass
 
+def download_threaded(pbar, base_url, user, files):
+    session = requests.session()
+    retry = Retry(total=5, backoff_factor=2, status_forcelist=[429])
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+
+    def download(f):
+        filename = f"{user}/{f['name']}"
+        if os.path.exists(filename):
+            pass
+        else:
+            try:
+                resp = session.get(f"{base_url}/{f['path']}", stream=True)
+                if resp.status_code != 200:
+                    logger.info(resp.status_code)
+                resp.raise_for_status()
+                with open(filename, "wb") as output:
+                    shutil.copyfileobj(resp.raw, output)
+                if "last-modified" in resp.headers:
+                    date = parse(resp.headers["last-modified"])
+                    os.utime(filename, (date.timestamp(), date.timestamp()))
+            except (FileNotFoundError, HTTPError, MaxRetryError, RetryError) as err:
+                logger.debug(err)
+        pbar.update(1)
+
+    with ThreadPoolExecutor(10) as pool:
+        for _ in pool.map(download, files):
+            pass
 
 @APP.command()
 def coomer(user_id: str, files: bool = False, limit: int = None):
