@@ -70,7 +70,8 @@ def pull_user(
     base_url: str = "https://kemono.party",
     include_files: bool = False,
     exclude_external: bool = True,
-    limit: int = None
+    limit: int = None,
+    post_id: bool = False,
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -100,7 +101,11 @@ def pull_user(
     for n, p in enumerate(populate_posts(f"{base_url}/api/{service}/user/{user_id}")):
         for i in file_generator(p):
             if i:
-                files.append(i)
+                if post_id:
+                    i['name'] = p['id'] + '_' + i['name']
+                    files.append(i)
+                else:
+                    files.append(i)
         if limit and n == limit:
             break
     if exclude_external:
@@ -136,11 +141,11 @@ def pull_user(
 
 
 @APP.command()
-def coomer(user_id: str):
+def coomer(user_id: str, files: bool = False, limit: int = None):
     """Convenience command for running against coomer, Onlyfans"""
     base = "https://coomer.party"
     service = "onlyfans"
-    pull_user(service, user_id, base)
+    pull_user(service, user_id, base, include_files=files, limit=limit)
 
 
 if __name__ == "__main__":
