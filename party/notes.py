@@ -14,6 +14,7 @@ import typer
 
 from dateutil.parser import parse
 from loguru import logger
+from prettytable import PrettyTable
 from requests.adapters import HTTPAdapter
 
 from requests.exceptions import HTTPError, RetryError
@@ -21,6 +22,7 @@ from tqdm import tqdm
 from urllib3.util.retry import Retry
 from urllib3.exceptions import MaxRetryError
 
+from .user import User, UserSchema
 APP = typer.Typer()
 
 
@@ -76,6 +78,8 @@ def pull_user(
     exclude_external: bool = True,
     limit: int = None,
     post_id: bool = False,
+    name: str = None,
+    id: str = None
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -85,9 +89,22 @@ def pull_user(
         include_files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
     """
-    user, user_id = generate_user_data(service, user_id, base_url)
+    if name or id:
+        if name:
+            user = name
+            user_id
+        if id:
+            user = user_id
+            user_id = id
+    else:
+        user, user_id = generate_user_data(service, user_id, base_url)
     if not os.path.exists(user):
         os.mkdir(user)
+    info = User(id=user_id, name=user, service=service)
+    if not os.path.exists(f"{user}/.info"):
+        with open(f"{user}/.info", "w") as info_out:
+            logger.info(UserSchema().dumps(info))
+            info_out.write(UserSchema().dumps(info))
     logger.info(f"Downloading {user}")
 
     file_generator = (
@@ -102,11 +119,11 @@ def pull_user(
         for i in file_generator(post):
             if i:
                 if post_id:
-                    i['name'] = p['id'] + '_' + i['name']
+                    i["name"] = post["id"] + "_" + i["name"]
                     files.append(i)
                 else:
                     files.append(i)
-        if limit and n == limit:
+        if limit and num == limit:
             break
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
@@ -118,27 +135,36 @@ def pull_user(
         # download_threaded(pbar, base_url, user, files)
         asyncio.run(download_async(pbar, base_url, user, files))
 
+
 async def download_async(pbar, base_url, user, files):
-    async with aiohttp.ClientSession(base_url) as session:
-        semaphore = asyncio.Semaphore(15)
+    timeout = aiohttp.ClientTimeout(60 * 60)
+    async with aiohttp.ClientSession(base_url, timeout=timeout) as session:
+        # async with aiohttp.ClientSession(base_url, raise_for_status=True) as session:
+        semaphore = asyncio.Semaphore(10)
+
         async def download(f, session):
             filename = f"{user}/{f['name']}"
             if os.path.exists(filename):
                 pbar.update(1)
                 return
             async with semaphore:
-                async with session.get(f['path']) as resp:
-                    async with aiofiles.open(filename, "wb") as output:
-                        async for data in resp.content.iter_chunked(64 * 1024):
-                            await output.write(data)
-                    if 'last-modified' in resp.headers:
-                        date = parse(resp.headers['last-modified'])
-                        os.utime(filename, (date.timestamp(), date.timestamp()))
+                async with session.get(f["path"]) as resp:
+                    if resp.status == 200:
+                        async with aiofiles.open(filename, "wb") as output:
+                            async for data in resp.content.iter_chunked(2 * 2 ** 16):
+                                await output.write(data)
+                        if "last-modified" in resp.headers:
+                            date = parse(resp.headers["last-modified"])
+                            os.utime(filename, (date.timestamp(), date.timestamp()))
+                    else:
+                        logger.debug(dict(status=resp.status, url=f["path"]))
             pbar.update(1)
+
         downloads = [download(f, session) for f in files]
         await asyncio.gather(*downloads)
 
     # pass
+
 
 def download_threaded(pbar, base_url, user, files):
     session = requests.session()
@@ -169,12 +195,27 @@ def download_threaded(pbar, base_url, user, files):
         for _ in pool.map(download, files):
             pass
 
+
 @APP.command()
 def coomer(user_id: str, files: bool = False, limit: int = None):
     """Convenience command for running against coomer, Onlyfans"""
     base = "https://coomer.party"
     service = "onlyfans"
     pull_user(service, user_id, base, include_files=files, limit=limit)
+
+
+@APP.command()
+def search(search: str, site: str = None, service: str = None):
+    from .user import User
+
+    base_url = "https://kemono.party"
+    users = User.generate_users(base_url)
+    results = [i for i in users if search in i.name.lower()]
+    table = PrettyTable()
+    table.field_names = ["Name", "ID", "Service"]
+    for result in results:
+        table.add_row([result.name, result.id, result.service])
+    print(table)
 
 
 if __name__ == "__main__":
