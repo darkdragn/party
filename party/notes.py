@@ -23,50 +23,8 @@ from urllib3.util.retry import Retry
 from urllib3.exceptions import MaxRetryError
 
 from .user import User, UserSchema
+
 APP = typer.Typer()
-
-
-def generate_user_data(service: str, user_id: str | int, base_url: str) -> (str, int):
-    """Filter through a list of users, find by either id or name
-    Args:
-        service: Ex. patreon, fanbox, fantia
-        user_id: Either string or int, to match name or id
-        base_url: usually https://kemono.party
-    Return:
-        (name, id): plain text name and int id for harvest
-    """
-    users = requests.get(f"{base_url}/api/creators").json()
-    try:
-        int(user_id)
-        user = next(
-            (
-                i["name"]
-                for i in users
-                if i["service"] == service and i["id"] == str(user_id)
-            )
-        )
-    except ValueError:
-        user = user_id
-        user_id = next(
-            (i["id"] for i in users if i["service"] == service and i["name"] == user)
-        )
-    return user, user_id
-
-
-def populate_posts(url, total: int = None):
-    count = 0
-    offset = 0
-    while True:
-        resp = requests.get(url, params=dict(o=offset)).json()
-        for post in resp:
-            count += 1
-            yield post
-            if total and count >= total:
-                break
-        if len(resp) > 0:
-            offset += 25
-        else:
-            break
 
 
 @APP.command(name="kemono")
@@ -79,7 +37,7 @@ def pull_user(
     limit: int = None,
     post_id: bool = False,
     name: str = None,
-    id: str = None
+    id: str = None,
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -89,23 +47,12 @@ def pull_user(
         include_files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
     """
-    if name or id:
-        if name:
-            user = name
-            user_id
-        if id:
-            user = user_id
-            user_id = id
-    else:
-        user, user_id = generate_user_data(service, user_id, base_url)
-    if not os.path.exists(user):
-        os.mkdir(user)
-    info = User(id=user_id, name=user, service=service)
-    if not os.path.exists(f"{user}/.info"):
-        with open(f"{user}/.info", "w") as info_out:
-            logger.info(UserSchema().dumps(info))
-            info_out.write(UserSchema().dumps(info))
-    logger.info(f"Downloading {user}")
+    user = User.get_user(base_url, service, user_id)
+    if not os.path.exists(user.name):
+        os.mkdir(user.name)
+    with open(f"{user.name}/.info", "w", encoding="utf-8") as info_out:
+        info_out.write(UserSchema().dumps(user))
+    logger.info(f"Downloading {user.name}")
 
     file_generator = (
         lambda x: chain(x["attachments"], [x["file"]])
@@ -113,9 +60,7 @@ def pull_user(
         else x["attachments"]
     )
     files = []
-    for num, post in enumerate(
-        populate_posts(f"{base_url}/api/{service}/user/{user_id}")
-    ):
+    for num, post in enumerate(user.generate_posts()):
         for i in file_generator(post):
             if i:
                 if post_id:
@@ -133,7 +78,7 @@ def pull_user(
                 i["name"] = i["name"].split("/").pop()
     with tqdm(total=len(files)) as pbar:
         # download_threaded(pbar, base_url, user, files)
-        asyncio.run(download_async(pbar, base_url, user, files))
+        asyncio.run(download_async(pbar, base_url, user.name, files))
 
 
 async def download_async(pbar, base_url, user, files):
@@ -162,8 +107,6 @@ async def download_async(pbar, base_url, user, files):
 
         downloads = [download(f, session) for f in files]
         await asyncio.gather(*downloads)
-
-    # pass
 
 
 def download_threaded(pbar, base_url, user, files):
@@ -205,12 +148,23 @@ def coomer(user_id: str, files: bool = False, limit: int = None):
 
 
 @APP.command()
-def search(search: str, site: str = None, service: str = None):
-    from .user import User
-
+def search(search_str: str, site: str = None, service: str = None):
+    """Search function
+    Args:
+        search_str: used to filter users against name.lower()
+        site: default to kemono, if string 'coomer' user the coomer url
+        service: service name to filter users against [patreon,fantia,fanbox,etc...]
+    """
     base_url = "https://kemono.party"
+    if site == "coomer":
+        base_url = "https://coomer.party"
     users = User.generate_users(base_url)
-    results = [i for i in users if search in i.name.lower()]
+    check = (
+        lambda x: x.service == service and search_str in x.name.lower()
+        if service
+        else lambda x: search_str in x.name.lower()
+    )
+    results = [i for i in users if check(i)]
     table = PrettyTable()
     table.field_names = ["Name", "ID", "Service"]
     for result in results:
