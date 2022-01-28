@@ -1,9 +1,10 @@
-
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import requests
 from marshmallow import Schema, fields, post_load
-from .notes import populate_posts
+# from .notes import populate_posts
+
 
 @dataclass
 class User:
@@ -15,14 +16,17 @@ class User:
 
     def __eq__(self, other):
         output = False
-        if self.service == other['service']:
-            if other['id'].isnumeric():
-                output = self.id == other['id']
+        if self.service == other["service"]:
+            if other["id"].isnumeric():
+                output = self.id == other["id"]
             else:
-                output = self.name == other['id']
+                output = self.name == other["id"]
         return output
-            
 
+    @staticmethod
+    def generate_users(base_url):
+        resp = requests.get(f"{base_url}/api/creators")
+        return UserSchema().loads(resp.text, many=True)
 
 
 class UserSchema(Schema):
