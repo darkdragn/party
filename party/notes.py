@@ -77,8 +77,8 @@ def pull_user(
             if "//" in i["name"]:
                 i["name"] = i["name"].split("/").pop()
     with tqdm(total=len(files)) as pbar:
-        # download_threaded(pbar, base_url, user, files)
-        asyncio.run(download_async(pbar, base_url, user.name, files))
+        download_threaded(pbar, base_url, user.name, files)
+        # asyncio.run(download_async(pbar, base_url, user.name, files))
 
 
 async def download_async(pbar, base_url, user, files):
@@ -98,6 +98,7 @@ async def download_async(pbar, base_url, user, files):
                         async with aiofiles.open(filename, "wb") as output:
                             async for data in resp.content.iter_chunked(2 * 2 ** 16):
                                 await output.write(data)
+                                await asyncio.sleep(0)
                         if "last-modified" in resp.headers:
                             date = parse(resp.headers["last-modified"])
                             os.utime(filename, (date.timestamp(), date.timestamp()))
@@ -160,9 +161,9 @@ def search(search_str: str, site: str = None, service: str = None):
         base_url = "https://coomer.party"
     users = User.generate_users(base_url)
     check = (
-        lambda x: x.service == service and search_str in x.name.lower()
+        (lambda x: x.service == service and search_str in x.name.lower())
         if service
-        else lambda x: search_str in x.name.lower()
+        else (lambda x: search_str in x.name.lower())
     )
     results = [i for i in users if check(i)]
     table = PrettyTable()
