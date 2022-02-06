@@ -2,10 +2,13 @@
 """Quick notes on pulling from kemono.party"""
 
 import asyncio
+import json
 import os
+import re
 import shutil
+
 from concurrent.futures import ThreadPoolExecutor
-from itertools import chain
+from itertools import chain, islice
 
 import aiofiles
 import aiohttp
@@ -38,6 +41,7 @@ def pull_user(
     post_id: bool = False,
     name: str = None,
     id: str = None,
+    ignore_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -47,6 +51,7 @@ def pull_user(
         include_files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
     """
+    logger.info(ignore_extensions)
     user = User.get_user(base_url, service, user_id)
     if not os.path.exists(user.name):
         os.mkdir(user.name)
@@ -60,16 +65,21 @@ def pull_user(
         else x["attachments"]
     )
     files = []
-    for num, post in enumerate(user.generate_posts()):
+    posts = user.generate_posts()
+    if limit:
+        posts = islice(posts, limit)
+    for post in posts:
         for i in file_generator(post):
             if i:
-                if post_id:
+                if ignore_extensions and any(
+                    [i["name"].endswith(ignore) for ignore in ignore_extensions]
+                ):
+                    pass
+                elif post_id:
                     i["name"] = post["id"] + "_" + i["name"]
                     files.append(i)
                 else:
                     files.append(i)
-        if limit and num == limit:
-            break
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
     else:
@@ -135,7 +145,7 @@ def download_threaded(pbar, base_url, user, files):
                 logger.debug(err)
         pbar.update(1)
 
-    with ThreadPoolExecutor(10) as pool:
+    with ThreadPoolExecutor(5) as pool:
         for _ in pool.map(download, files):
             pass
 
@@ -171,6 +181,20 @@ def search(search_str: str, site: str = None, service: str = None):
     for result in results:
         table.add_row([result.name, result.id, result.service])
     print(table)
+
+
+@APP.command()
+def custom_parse(service: str, user_id: str, search: str, limit: int = None):
+    user = User.get_user("https://kemono.party", service, user_id)
+    if not os.path.exists(user.name):
+        os.mkdir(user.name)
+    logger.info(f"Downloading {user.name}")
+    posts = user.generate_posts()
+    if limit:
+        posts = islice(posts, limit)
+    output = [i for p in posts for i in re.findall(search, p["content"])]
+    print(json.dumps(output))
+    # print(posts[0])
 
 
 if __name__ == "__main__":
