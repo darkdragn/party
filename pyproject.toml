@@ -26,6 +26,7 @@ marshmallow = "^3.14.1"
 aiohttp = "^3.8.1"
 aiofiles = "^0.8.0"
 prettytable = "^3.0.0"
+simplejson = "^3.17.6"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"

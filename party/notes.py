@@ -2,17 +2,21 @@
 """Quick notes on pulling from kemono.party"""
 
 import asyncio
-import json
+
+# import json
 import os
 import re
 import shutil
 
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
 from itertools import chain, islice
+from typing import Counter
 
 import aiofiles
 import aiohttp
 import requests
+import simplejson as json
 import typer
 
 from dateutil.parser import parse
@@ -30,6 +34,13 @@ from .user import User, UserSchema
 APP = typer.Typer()
 
 
+class StatusEnum(Enum):
+    SUCCESS = 1
+    ERROR_429 = 2
+    ERROR_OTHER = 3
+    EXISTS = 4
+
+
 @APP.command(name="kemono")
 def pull_user(
     service: str,
@@ -39,9 +50,10 @@ def pull_user(
     exclude_external: bool = True,
     limit: int = None,
     post_id: bool = False,
-    name: str = None,
-    id: str = None,
+    # name: str = None,
+    # id: str = None,
     ignore_extensions: list[str] = typer.Option(None, "-i"),
+    workers: int = typer.Option(10, "-w"),
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -51,13 +63,26 @@ def pull_user(
         include_files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
     """
-    logger.info(ignore_extensions)
+    logger.info(f"Ignored Extensions: {ignore_extensions}")
     user = User.get_user(base_url, service, user_id)
     if not os.path.exists(user.name):
         os.mkdir(user.name)
     with open(f"{user.name}/.info", "w", encoding="utf-8") as info_out:
-        info_out.write(UserSchema().dumps(user))
-    logger.info(f"Downloading {user.name}")
+        info_out.write(
+            json.dumps(
+                dict(
+                    user=user,
+                    options=dict(
+                        ignore_extensions=ignore_extensions,
+                        include_files=include_files,
+                        exclude_external=exclude_external,
+                        base_url=base_url,
+                    ),
+                ),
+                for_json=True,
+            )
+        )
+    logger.info(f"User found: {user.name}, parsing posts...")
 
     file_generator = (
         lambda x: chain(x["attachments"], [x["file"]])
@@ -87,49 +112,66 @@ def pull_user(
             if "//" in i["name"]:
                 i["name"] = i["name"].split("/").pop()
     with tqdm(total=len(files)) as pbar:
-        download_threaded(pbar, base_url, user.name, files)
-        # asyncio.run(download_async(pbar, base_url, user.name, files))
+        # download_threaded(pbar, base_url, user.name, files, workers)
+        output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
+    count = Counter(output)
+    logger.info(f"Output status: {count}")
 
 
-async def download_async(pbar, base_url, user, files):
+async def download_async(pbar, base_url, user, files, workers: int = 10):
     timeout = aiohttp.ClientTimeout(60 * 60)
     async with aiohttp.ClientSession(base_url, timeout=timeout) as session:
         # async with aiohttp.ClientSession(base_url, raise_for_status=True) as session:
-        semaphore = asyncio.Semaphore(10)
+        semaphore = asyncio.Semaphore(workers)
 
         async def download(f, session):
+            status = StatusEnum.SUCCESS
             filename = f"{user}/{f['name']}"
             if os.path.exists(filename):
                 pbar.update(1)
-                return
+                return StatusEnum.EXISTS
             async with semaphore:
                 async with session.get(f["path"]) as resp:
                     if resp.status == 200:
-                        async with aiofiles.open(filename, "wb") as output:
-                            async for data in resp.content.iter_chunked(2 * 2 ** 16):
-                                await output.write(data)
-                                await asyncio.sleep(0)
-                        if "last-modified" in resp.headers:
-                            date = parse(resp.headers["last-modified"])
-                            os.utime(filename, (date.timestamp(), date.timestamp()))
+                        try:
+                            async with aiofiles.open(filename, "wb") as output:
+                                async for data in resp.content.iter_chunked(
+                                    2 * 2 ** 16
+                                ):
+                                    await output.write(data)
+                                    # await asyncio.sleep(0)
+                            if "last-modified" in resp.headers:
+                                date = parse(resp.headers["last-modified"])
+                                os.utime(filename, (date.timestamp(), date.timestamp()))
+                        except aiohttp.client_exceptions.ClientPayloadError as err:
+                            logger.debug(
+                                dict(error=err, filename=filename, url=f["path"])
+                            )
+                            os.remove(filename)
+                            status = StatusEnum.ERROR_OTHER
                     else:
-                        logger.debug(dict(status=resp.status, url=f["path"]))
+                        logger.debug(
+                            dict(status=resp.status, filename=filename, url=f["path"])
+                        )
+                        status = StatusEnum.ERROR_429
             pbar.update(1)
+            return status
 
         downloads = [download(f, session) for f in files]
-        await asyncio.gather(*downloads)
+        return await asyncio.gather(*downloads)
 
 
-def download_threaded(pbar, base_url, user, files):
+def download_threaded(pbar, base_url, user, files, workers: int = 10):
     session = requests.session()
     retry = Retry(total=5, backoff_factor=2, status_forcelist=[429])
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
 
     def download(f):
+        status = StatusEnum.SUCCESS
         filename = f"{user}/{f['name']}"
         if os.path.exists(filename):
-            pass
+            status = StatusEnum.EXISTS
         else:
             try:
                 resp = session.get(f"{base_url}/{f['path']}", stream=True)
@@ -143,11 +185,15 @@ def download_threaded(pbar, base_url, user, files):
                     os.utime(filename, (date.timestamp(), date.timestamp()))
             except (FileNotFoundError, HTTPError, MaxRetryError, RetryError) as err:
                 logger.debug(err)
+                status = StatusEnum.ERROR_429
         pbar.update(1)
+        return status
 
-    with ThreadPoolExecutor(5) as pool:
-        for _ in pool.map(download, files):
-            pass
+    with ThreadPoolExecutor() as pool:
+        output = pool.map(download, files)
+        # for _ in pool.map(download, files):
+        #     pass
+    return output
 
 
 @APP.command()

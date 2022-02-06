@@ -51,6 +51,8 @@ class User:
             else:
                 break
 
+    def for_json(self):
+        return UserSchema().dump(self)                
     @property
     def url(self):
         return f"{self.site}/api/{self.service}/user/{self.id}"
