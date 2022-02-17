@@ -30,7 +30,9 @@ from tqdm import tqdm
 from urllib3.util.retry import Retry
 from urllib3.exceptions import MaxRetryError
 
-from .user import User, UserSchema
+from yaspin import yaspin
+
+from .user import User
 
 APP = typer.Typer()
 
@@ -61,11 +63,9 @@ def pull_user(
     include_files: bool = False,
     exclude_external: bool = True,
     limit: int = None,
-    post_id: bool = False,
-    # name: str = None,
-    # id: str = None,
+    post_id: bool = None,
     ignore_extensions: list[str] = typer.Option(None, "-i"),
-    workers: int = typer.Option(10, "-w"),
+    workers: int = typer.Option(8, "-w"),
 ):
     """Quick download command for kemono.party
     Attrs:
@@ -75,55 +75,60 @@ def pull_user(
         include_files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
     """
-    logger.info(f"Ignored Extensions: {ignore_extensions}")
-    user = User.get_user(base_url, service, user_id)
+    logger.debug(f"Ignored Extensions: {ignore_extensions}")
+    with yaspin().shark as spin:
+        spin.text = "Pulling user DB"
+        user = User.get_user(base_url, service, user_id)
     if not os.path.exists(user.name):
         os.mkdir(user.name)
     with open(f"{user.name}/.info", "w", encoding="utf-8") as info_out:
+        options = dict(
+            ignore_extensions=ignore_extensions,
+            include_files=include_files,
+            exclude_external=exclude_external,
+            base_url=base_url,
+            post_id=post_id,
+        )
         info_out.write(
             json.dumps(
-                dict(
-                    user=user,
-                    options=dict(
-                        ignore_extensions=ignore_extensions,
-                        include_files=include_files,
-                        exclude_external=exclude_external,
-                        base_url=base_url,
-                        post_id=post_id,
-                    ),
-                ),
+                dict(user=user, options=options),
                 for_json=True,
             )
         )
-    logger.info(f"User found: {user.name}, parsing posts...")
-
-    file_generator = (
-        lambda x: chain(x["attachments"], [x["file"]])
-        if include_files
-        else x["attachments"]
-    )
-    files = []
-    posts = user.generate_posts()
-    if limit:
-        posts = islice(posts, limit)
-    for post in posts:
-        for i in file_generator(post):
-            if i:
-                if ignore_extensions and any(
-                    [i["name"].endswith(ignore) for ignore in ignore_extensions]
-                ):
-                    pass
-                elif post_id:
-                    i["name"] = post["id"] + "_" + i["name"]
-                    files.append(i)
-                else:
-                    files.append(i)
+    logger.debug(f"User found: {user.name}, parsing posts...")
+    with yaspin(text=f"User found: {user.name}; parsing posts..."):
+        file_generator = (
+            lambda x: chain(x["attachments"], [x["file"]])
+            if include_files
+            else x["attachments"]
+        )
+        posts = user.generate_posts()
+        if limit:
+            posts = islice(posts, limit)
+        files = [dict(id=p["id"], **f) for p in posts for f in file_generator(p) if f]
+        if ignore_extensions:
+            filter_ = lambda x: not any(
+                x["name"].endswith(i) for i in ignore_extensions
+            )
+            files = list(filter(filter_, files))
+    if post_id is None:
+        fn_set = {i["name"] for i in files}
+        if len(files) > len(fn_set):
+            typer.secho(
+                "Duplicate files found, updating post_id bool",
+                fg=typer.colors.BRIGHT_RED,
+            )
+            post_id = True
+    if post_id:
+        for ref in files:
+            ref["name"] = f"{ref['id']}_{ref['name']}"
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
     else:
         for i in files:
             if "//" in i["name"]:
                 i["name"] = i["name"].split("/").pop()
+    typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         # download_threaded(pbar, base_url, user.name, files, workers)
         output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
@@ -346,6 +351,11 @@ def details(
         filter_ = lambda x: not any(x["name"].endswith(i) for i in ignore_extensions)
         attachments = list(filter(filter_, attachments))
         files = list(filter(filter_, files))
+    full = [i["name"] for i in chain(attachments, files)]
+    # print(full)
+    fn_set = {i for i in full}
+    print(len(full))
+    print(len(fn_set))
     logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
 
 

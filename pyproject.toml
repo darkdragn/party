@@ -27,6 +27,7 @@ aiohttp = "^3.8.1"
 aiofiles = "^0.8.0"
 prettytable = "^3.0.0"
 simplejson = "^3.17.6"
+yaspin = "^2.1.0"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
