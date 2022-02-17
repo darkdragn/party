@@ -7,6 +7,7 @@ import asyncio
 import os
 import re
 import shutil
+import sys
 
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
@@ -41,6 +42,15 @@ class StatusEnum(Enum):
     ERROR_429 = 2
     ERROR_OTHER = 3
     EXISTS = 4
+
+
+@APP.callback()
+def configure(verbose: bool = False):
+    """Global params"""
+    if verbose:
+        return
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
 
 
 @APP.command(name="kemono")
