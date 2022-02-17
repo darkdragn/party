@@ -1,3 +1,4 @@
+"""Basic storage and serialization for user objects"""
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -9,6 +10,8 @@ from marshmallow import Schema, fields, post_load
 
 @dataclass
 class User:
+    """Storage class for User data and functions"""
+
     id: str
     name: str
     service: str
@@ -28,19 +31,29 @@ class User:
 
     @staticmethod
     def generate_users(base_url):
+        """Generator to return all User objects from a base_url"""
         resp = requests.get(f"{base_url}/api/creators")
         return UserSchema(context=dict(site=base_url)).loads(resp.text, many=True)
 
     @classmethod
-    def get_user(cls, base_url, service, search):
+    def get_user(cls, base_url: str, service: str, search: str):
+        """Return a User object from a match againse service and search.
+        Search may be id or name
+        """
         users = cls.generate_users(base_url)
-        try:
-            int(search)
-            return next((i for i in users if i.service == service and i.id == search))
-        except ValueError:
-            return next((i for i in users if i.service == service and i.name == search))
+        attr = "name"
+        if search.isnumeric():
+            attr = "id"
+        return next(
+            (i for i in users if i.service == service and getattr(i, attr) == search)
+        )
 
     def generate_posts(self):
+        """Generator for user posts
+
+        Returns:
+            Post
+        """
         offset = 0
         while True:
             resp = requests.get(self.url, params=dict(o=offset)).json()
@@ -52,13 +65,18 @@ class User:
                 break
 
     def for_json(self):
-        return UserSchema().dump(self)                
+        """JSON convert method for simplejson"""
+        return UserSchema().dump(self)
+
     @property
     def url(self):
+        """URL builder for self"""
         return f"{self.site}/api/{self.service}/user/{self.id}"
 
 
 class UserSchema(Schema):
+    """User Schema for parsing user objects from a party site (kemono/coomer)"""
+
     id: str = fields.Str()
     indexed = fields.DateTime("%a, %d %b %Y %H:%M:%S %Z")
     name: str = fields.Str()
@@ -69,6 +87,7 @@ class UserSchema(Schema):
 
     @post_load
     def create_user(self, data, **kwargs):
+        """Deserialize wrapper for creating User Dataclass"""
         if self.context:
             return User(site=self.context["site"], **data)
         return User(**data)

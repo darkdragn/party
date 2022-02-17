@@ -35,6 +35,8 @@ APP = typer.Typer()
 
 
 class StatusEnum(Enum):
+    """Enum for reporting the status of downloads"""
+
     SUCCESS = 1
     ERROR_429 = 2
     ERROR_OTHER = 3
@@ -77,6 +79,7 @@ def pull_user(
                         include_files=include_files,
                         exclude_external=exclude_external,
                         base_url=base_url,
+                        post_id=post_id,
                     ),
                 ),
                 for_json=True,
@@ -119,6 +122,7 @@ def pull_user(
 
 
 async def download_async(pbar, base_url, user, files, workers: int = 10):
+    """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60)
     async with aiohttp.ClientSession(base_url, timeout=timeout) as session:
         # async with aiohttp.ClientSession(base_url, raise_for_status=True) as session:
@@ -131,29 +135,41 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
                 pbar.update(1)
                 return StatusEnum.EXISTS
             async with semaphore:
-                async with session.get(f["path"]) as resp:
-                    if resp.status == 200:
-                        try:
-                            async with aiofiles.open(filename, "wb") as output:
-                                async for data in resp.content.iter_chunked(
-                                    2 * 2 ** 16
-                                ):
-                                    await output.write(data)
-                                    # await asyncio.sleep(0)
-                            if "last-modified" in resp.headers:
-                                date = parse(resp.headers["last-modified"])
-                                os.utime(filename, (date.timestamp(), date.timestamp()))
-                        except aiohttp.client_exceptions.ClientPayloadError as err:
+                try:
+                    async with session.get(
+                        f["path"], headers={"Accept-Encoding": "identity"}
+                    ) as resp:
+                        if resp.status == 200:
+                            try:
+                                async with aiofiles.open(filename, "wb") as output:
+                                    async for data in resp.content.iter_chunked(
+                                        # 2 * 2 ** 16
+                                        2
+                                        ** 16
+                                    ):
+                                        await output.write(data)
+                                        # await asyncio.sleep(0)
+                                if "last-modified" in resp.headers:
+                                    date = parse(resp.headers["last-modified"])
+                                    os.utime(
+                                        filename, (date.timestamp(), date.timestamp())
+                                    )
+                            except aiohttp.client_exceptions.ClientPayloadError as err:
+                                logger.debug(
+                                    dict(error=err, filename=filename, url=f["path"])
+                                )
+                                os.remove(filename)
+                                status = StatusEnum.ERROR_OTHER
+                        else:
                             logger.debug(
-                                dict(error=err, filename=filename, url=f["path"])
+                                dict(
+                                    status=resp.status, filename=filename, url=f["path"]
+                                )
                             )
-                            os.remove(filename)
-                            status = StatusEnum.ERROR_OTHER
-                    else:
-                        logger.debug(
-                            dict(status=resp.status, filename=filename, url=f["path"])
-                        )
-                        status = StatusEnum.ERROR_429
+                            status = StatusEnum.ERROR_429
+                except aiohttp.client_exceptions.TooManyRedirects as err:
+                    logger.debug(dict(error=err, filename=filename, url=f["path"]))
+                    status = StatusEnum.ERROR_OTHER
             pbar.update(1)
             return status
 
@@ -197,11 +213,27 @@ def download_threaded(pbar, base_url, user, files, workers: int = 10):
 
 
 @APP.command()
-def coomer(user_id: str, files: bool = False, limit: int = None):
+def coomer(
+    user_id: str,
+    files: bool = False,
+    limit: int = None,
+    ignore_extensions: list[str] = typer.Option(None, "-i"),
+    post_id: bool = False,
+    workers: int = typer.Option(10, "-w"),
+):
     """Convenience command for running against coomer, Onlyfans"""
     base = "https://coomer.party"
     service = "onlyfans"
-    pull_user(service, user_id, base, include_files=files, limit=limit)
+    pull_user(
+        service,
+        user_id,
+        base,
+        include_files=files,
+        limit=limit,
+        post_id=post_id,
+        ignore_extensions=ignore_extensions,
+        workers=workers,
+    )
 
 
 @APP.command()
@@ -231,6 +263,7 @@ def search(search_str: str, site: str = None, service: str = None):
 
 @APP.command()
 def custom_parse(service: str, user_id: str, search: str, limit: int = None):
+    """Uses provided regex to pull links from the content key on posts"""
     user = User.get_user("https://kemono.party", service, user_id)
     if not os.path.exists(user.name):
         os.mkdir(user.name)
@@ -241,6 +274,41 @@ def custom_parse(service: str, user_id: str, search: str, limit: int = None):
     output = [i for p in posts for i in re.findall(search, p["content"])]
     print(json.dumps(output))
     # print(posts[0])
+
+
+@APP.command()
+def update(folder: str, limit: int = None):
+    """Update an existing pull from a party site"""
+    with open(f"{folder}/.info", encoding="utf-8") as info:
+        settings = json.load(info)
+    # print(json.dumps(settings))
+    pull_user(
+        settings["user"]["service"],
+        settings["user"]["name"],
+        workers=4,
+        limit=limit,
+        **settings["options"],
+    )
+
+
+@APP.command()
+def details(
+    service: str,
+    user_id: str,
+    base_url: str = "https://kemono.party",
+    ignore_extensions: list[str] = typer.Option(None, "-i"),
+):
+    """Show user details: (post#,attachment#,files#)"""
+    user = User.get_user(base_url, service, user_id)
+    logger.info(f"User found: {user.name}, parsing posts...")
+    posts = list(user.generate_posts())
+    attachments = [a for p in posts for a in p["attachments"]]
+    files = [p["file"] for p in posts if p["file"]]
+    if ignore_extensions:
+        filter_ = lambda x: not any(x["name"].endswith(i) for i in ignore_extensions)
+        attachments = list(filter(filter_, attachments))
+        files = list(filter(filter_, files))
+    logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
 
 
 if __name__ == "__main__":

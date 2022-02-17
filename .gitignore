@@ -1,3 +1,7 @@
 downloads
 **/*.jpg
+**/*.jpe
+**/*.png
+**/*.gif
+**/*.mp4
 **/*.pyc
