@@ -105,7 +105,12 @@ def pull_user(
         posts = user.generate_posts()
         if limit:
             posts = islice(posts, limit)
-        files = [dict(id=p["id"], **f) for p in posts for f in file_generator(p) if f]
+        files = [
+            dict(id=p["id"], name=f["name"], path=f["path"])
+            for p in posts
+            for f in file_generator(p)
+            if f
+        ]
         if ignore_extensions:
             filter_ = lambda x: not any(
                 x["name"].endswith(i) for i in ignore_extensions
@@ -351,11 +356,6 @@ def details(
         filter_ = lambda x: not any(x["name"].endswith(i) for i in ignore_extensions)
         attachments = list(filter(filter_, attachments))
         files = list(filter(filter_, files))
-    full = [i["name"] for i in chain(attachments, files)]
-    # print(full)
-    fn_set = {i for i in full}
-    print(len(full))
-    print(len(fn_set))
     logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
 
 
