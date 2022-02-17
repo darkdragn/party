@@ -135,7 +135,6 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60)
     async with aiohttp.ClientSession(base_url, timeout=timeout) as session:
-        # async with aiohttp.ClientSession(base_url, raise_for_status=True) as session:
         semaphore = asyncio.Semaphore(workers)
 
         async def download(f, session):
@@ -150,6 +149,14 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
                         f["path"], headers={"Accept-Encoding": "identity"}
                     ) as resp:
                         if resp.status == 200:
+                            fbar = tqdm(
+                                desc=filename,
+                                total=int(resp.headers["content-length"]),
+                                unit="b",
+                                unit_divisor=1024,
+                                unit_scale=True,
+                                leave=False,
+                            )
                             try:
                                 async with aiofiles.open(filename, "wb") as output:
                                     async for data in resp.content.iter_chunked(
@@ -158,16 +165,20 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
                                         ** 16
                                     ):
                                         await output.write(data)
+                                        fbar.update(len(data))
                                         # await asyncio.sleep(0)
                                 if "last-modified" in resp.headers:
                                     date = parse(resp.headers["last-modified"])
                                     os.utime(
                                         filename, (date.timestamp(), date.timestamp())
                                     )
+                                fbar.refresh()
+                                fbar.close()
                             except aiohttp.client_exceptions.ClientPayloadError as err:
                                 logger.debug(
                                     dict(error=err, filename=filename, url=f["path"])
                                 )
+                                fbar.close()
                                 os.remove(filename)
                                 status = StatusEnum.ERROR_OTHER
                         else:
@@ -188,6 +199,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
 
 
 def download_threaded(pbar, base_url, user, files, workers: int = 10):
+    """Internal downloaded handler for threaded pulls"""
     session = requests.session()
     retry = Retry(total=5, backoff_factor=2, status_forcelist=[429])
     adapter = HTTPAdapter(max_retries=retry)
@@ -215,7 +227,7 @@ def download_threaded(pbar, base_url, user, files, workers: int = 10):
         pbar.update(1)
         return status
 
-    with ThreadPoolExecutor() as pool:
+    with ThreadPoolExecutor(workers) as pool:
         output = pool.map(download, files)
         # for _ in pool.map(download, files):
         #     pass
