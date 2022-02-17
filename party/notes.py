@@ -247,7 +247,13 @@ def coomer(
 
 
 @APP.command()
-def search(search_str: str, site: str = None, service: str = None):
+def search(
+    search_str: str,
+    site: str = None,
+    service: str = None,
+    ignore_extensions: list[str] = typer.Option(None, "-i"),
+    interactive: bool = typer.Option(False, "-i", "--interactive"),
+):
     """Search function
     Args:
         search_str: used to filter users against name.lower()
@@ -265,10 +271,20 @@ def search(search_str: str, site: str = None, service: str = None):
     )
     results = [i for i in users if check(i)]
     table = PrettyTable()
-    table.field_names = ["Name", "ID", "Service"]
-    for result in results:
-        table.add_row([result.name, result.id, result.service])
+    table.field_names = ["Index", "Name", "ID", "Service"]
+    for num, result in enumerate(results):
+        table.add_row([num, result.name, result.id, result.service])
     print(table)
+    if interactive:
+        selection = typer.prompt("Index selection: ", type=int)
+        user = results[selection]
+        typer.secho(
+            f"Downloading {user.name} using default options...",
+            fg=typer.colors.BRIGHT_GREEN,
+        )
+        pull_user(
+            user.service, user.name, workers=8, ignore_extensions=ignore_extensions
+        )
 
 
 @APP.command()
