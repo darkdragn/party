@@ -34,7 +34,7 @@ from yaspin import yaspin
 
 from .user import User
 
-APP = typer.Typer()
+APP = typer.Typer(no_args_is_help=True)
 
 
 class StatusEnum(Enum):
@@ -44,15 +44,6 @@ class StatusEnum(Enum):
     ERROR_429 = 2
     ERROR_OTHER = 3
     EXISTS = 4
-
-
-@APP.callback()
-def configure(verbose: bool = False):
-    """Global params"""
-    if verbose:
-        return
-    logger.remove()
-    logger.add(sys.stderr, level="INFO")
 
 
 @APP.command(name="kemono")
@@ -143,7 +134,7 @@ def pull_user(
 
 async def download_async(pbar, base_url, user, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
-    timeout = aiohttp.ClientTimeout(60 * 60)
+    timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
     async with aiohttp.ClientSession(base_url, timeout=timeout) as session:
         semaphore = asyncio.Semaphore(workers)
 
@@ -268,7 +259,7 @@ def coomer(
     )
 
 
-@APP.command()
+@APP.command(no_args_is_help=True)
 def search(
     search_str: str,
     site: str = None,
@@ -333,7 +324,7 @@ def update(folder: str, limit: int = None):
     pull_user(
         settings["user"]["service"],
         settings["user"]["name"],
-        workers=4,
+        workers=6,
         limit=limit,
         **settings["options"],
     )
@@ -357,6 +348,15 @@ def details(
         attachments = list(filter(filter_, attachments))
         files = list(filter(filter_, files))
     logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
+
+
+@APP.callback()
+def configure(verbose: bool = False):
+    """A quick cli for downloading from party-chan sites"""
+    if verbose:
+        return
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
 
 
 if __name__ == "__main__":
