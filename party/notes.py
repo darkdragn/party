@@ -116,8 +116,12 @@ def pull_user(
             )
             post_id = True
     if post_id:
+        new_files = {}
         for ref in files:
             ref["name"] = f"{ref['id']}_{ref['name']}"
+            if ref['name'] not in new_files:
+                new_files[ref['name']] = ref
+        files = list(new_files.values())
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
     else:
@@ -168,7 +172,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
                                         await output.write(data)
                                         fbar.update(len(data))
                                         # await asyncio.sleep(0)
-                                if "last-modified" in resp.headers:
+                                if "last-modified" in resp.headers and os.path.exists(filename):
                                     date = parse(resp.headers["last-modified"])
                                     os.utime(
                                         filename, (date.timestamp(), date.timestamp())
