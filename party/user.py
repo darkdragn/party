@@ -6,6 +6,7 @@ import requests
 from marshmallow import Schema, fields, post_load
 
 # from .notes import populate_posts
+from .posts import PostSchema
 
 
 @dataclass
@@ -63,6 +64,12 @@ class User:
                 offset += 25
             else:
                 break
+
+    def generate_posts_dataclass(self):
+        """Transitional, yield the dataclass version of posts"""
+        schema = PostSchema()
+        for post in self.generate_posts():
+            yield schema.load(post)
 
     def for_json(self):
         """JSON convert method for simplejson"""
