@@ -10,11 +10,12 @@ import shutil
 import sys
 
 from concurrent.futures import ThreadPoolExecutor
-from enum import Enum
+
+# from enum import Enum
 from itertools import chain, islice
 from typing import Counter
 
-import aiofiles
+# import aiofiles
 import aiohttp
 import requests
 import simplejson as json
@@ -32,18 +33,10 @@ from urllib3.exceptions import MaxRetryError
 
 from yaspin import yaspin
 
+from .common import StatusEnum
 from .user import User
 
 APP = typer.Typer(no_args_is_help=True)
-
-
-class StatusEnum(Enum):
-    """Enum for reporting the status of downloads"""
-
-    SUCCESS = 1
-    ERROR_429 = 2
-    ERROR_OTHER = 3
-    EXISTS = 4
 
 
 @APP.command(name="kemono")
@@ -88,20 +81,10 @@ def pull_user(
         )
     logger.debug(f"User found: {user.name}, parsing posts...")
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
-        file_generator = (
-            lambda x: chain(x["attachments"], [x["file"]])
-            if include_files
-            else x["attachments"]
-        )
-        posts = user.generate_posts()
+        posts = user.generate_posts_dataclass()
         if limit:
             posts = islice(posts, limit)
-        files = [
-            dict(id=p["id"], name=f["name"], path=f["path"])
-            for p in posts
-            for f in file_generator(p)
-            if f
-        ]
+        files = [f for p in posts for f in p.get_files(include_files)]
         if ignore_extensions:
             filter_ = lambda x: not any(
                 x["name"].endswith(i) for i in ignore_extensions
@@ -118,9 +101,9 @@ def pull_user(
     if post_id:
         new_files = {}
         for ref in files:
-            ref["name"] = f"{ref['id']}_{ref['name']}"
-            if ref['name'] not in new_files:
-                new_files[ref['name']] = ref
+            ref["name"] = f"{ref['post_id']}_{ref['name']}"
+            if ref["name"] not in new_files:
+                new_files[ref["name"]] = ref
         files = list(new_files.values())
     if exclude_external:
         files = [i for i in files if "//" not in i["name"]]
@@ -130,7 +113,6 @@ def pull_user(
                 i["name"] = i["name"].split("/").pop()
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
-        # download_threaded(pbar, base_url, user.name, files, workers)
         output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
     count = Counter(output)
     logger.info(f"Output status: {count}")
@@ -139,104 +121,23 @@ def pull_user(
 async def download_async(pbar, base_url, user, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
-    async with aiohttp.ClientSession(base_url, timeout=timeout) as session:
+    async with aiohttp.ClientSession(
+        base_url, timeout=timeout, headers={"Accept-Encoding": "identity"}
+    ) as session:
         semaphore = asyncio.Semaphore(workers)
 
-        async def download(f, session):
-            status = StatusEnum.SUCCESS
-            filename = f"{user}/{f['name']}"
+        async def download(file):
+            filename = f"{user}/{file.name}"
             if os.path.exists(filename):
                 pbar.update(1)
                 return StatusEnum.EXISTS
             async with semaphore:
-                try:
-                    async with session.get(
-                        f["path"], headers={"Accept-Encoding": "identity"}
-                    ) as resp:
-                        if resp.status == 200:
-                            fbar = tqdm(
-                                desc=filename,
-                                total=int(resp.headers["content-length"]),
-                                unit="b",
-                                unit_divisor=1024,
-                                unit_scale=True,
-                                leave=False,
-                            )
-                            try:
-                                async with aiofiles.open(filename, "wb") as output:
-                                    async for data in resp.content.iter_chunked(
-                                        # 2 * 2 ** 16
-                                        2
-                                        ** 16
-                                    ):
-                                        await output.write(data)
-                                        fbar.update(len(data))
-                                        # await asyncio.sleep(0)
-                                if "last-modified" in resp.headers and os.path.exists(filename):
-                                    date = parse(resp.headers["last-modified"])
-                                    os.utime(
-                                        filename, (date.timestamp(), date.timestamp())
-                                    )
-                                fbar.refresh()
-                                fbar.close()
-                            except aiohttp.client_exceptions.ClientPayloadError as err:
-                                logger.debug(
-                                    dict(error=err, filename=filename, url=f["path"])
-                                )
-                                fbar.close()
-                                os.remove(filename)
-                                status = StatusEnum.ERROR_OTHER
-                        else:
-                            logger.debug(
-                                dict(
-                                    status=resp.status, filename=filename, url=f["path"]
-                                )
-                            )
-                            status = StatusEnum.ERROR_429
-                except aiohttp.client_exceptions.TooManyRedirects as err:
-                    logger.debug(dict(error=err, filename=filename, url=f["path"]))
-                    status = StatusEnum.ERROR_OTHER
+                status = await file.download(session, filename)
             pbar.update(1)
             return status
 
-        downloads = [download(f, session) for f in files]
+        downloads = [download(f) for f in files]
         return await asyncio.gather(*downloads)
-
-
-def download_threaded(pbar, base_url, user, files, workers: int = 10):
-    """Internal downloaded handler for threaded pulls"""
-    session = requests.session()
-    retry = Retry(total=5, backoff_factor=2, status_forcelist=[429])
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-
-    def download(f):
-        status = StatusEnum.SUCCESS
-        filename = f"{user}/{f['name']}"
-        if os.path.exists(filename):
-            status = StatusEnum.EXISTS
-        else:
-            try:
-                resp = session.get(f"{base_url}/{f['path']}", stream=True)
-                if resp.status_code != 200:
-                    logger.info(resp.status_code)
-                resp.raise_for_status()
-                with open(filename, "wb") as output:
-                    shutil.copyfileobj(resp.raw, output)
-                if "last-modified" in resp.headers:
-                    date = parse(resp.headers["last-modified"])
-                    os.utime(filename, (date.timestamp(), date.timestamp()))
-            except (FileNotFoundError, HTTPError, MaxRetryError, RetryError) as err:
-                logger.debug(err)
-                status = StatusEnum.ERROR_429
-        pbar.update(1)
-        return status
-
-    with ThreadPoolExecutor(workers) as pool:
-        output = pool.map(download, files)
-        # for _ in pool.map(download, files):
-        #     pass
-    return output
 
 
 @APP.command()
@@ -344,7 +245,7 @@ def details(
     """Show user details: (post#,attachment#,files#)"""
     user = User.get_user(base_url, service, user_id)
     logger.info(f"User found: {user.name}, parsing posts...")
-    posts = list(user.generate_posts())
+    posts = list(user.generate_posts_dataclass())
     attachments = [a for p in posts for a in p["attachments"]]
     files = [p["file"] for p in posts if p["file"]]
     if ignore_extensions:
