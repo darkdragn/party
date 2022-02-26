@@ -27,6 +27,10 @@ class Attachment:
     path: Optional[str]
     post_id: Optional[int]
 
+    def __post_init__(self):
+        if self.name and "/" in self.name:
+            self.name = self.name.split("/").pop()
+
     def __getitem__(self, name):
         """Temporary hold over for migration"""
         return getattr(self, name)

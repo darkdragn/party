@@ -1,12 +1,19 @@
 """Basic storage and serialization for user objects"""
+# import json
+
 from dataclasses import dataclass
 from datetime import datetime
+from functools import cached_property
+from itertools import islice
+
+from typing import Iterator, List, Optional
 
 import requests
+import simplejson as json
 from marshmallow import Schema, fields, post_load
 
 # from .notes import populate_posts
-from .posts import PostSchema
+from .posts import Post, PostSchema
 
 
 @dataclass
@@ -38,45 +45,77 @@ class User:
 
     @classmethod
     def get_user(cls, base_url: str, service: str, search: str):
-        """Return a User object from a match againse service and search.
-        Search may be id or name
+        """Return a User object from a match against service and search.
+
+        Args:
+            base_url: kemono.party or coomer.party
+            service: { kemono: [patreon, fanbox, fantia, etc...], coomer: [onlyfans]}
+            search: user id or user name
+        Returns:
+            User
         """
         users = cls.generate_users(base_url)
-        attr = "name"
-        if search.isnumeric():
-            attr = "id"
+        attr = "id" if search.isnumeric() else "name"
         return next(
             (i for i in users if i.service == service and getattr(i, attr) == search)
         )
 
-    def generate_posts(self):
-        """Generator for user posts
+    def generate_posts(self) -> Iterator[Post]:
+        """Generator for Posts from this user
 
-        Returns:
+        Yields:
             Post
         """
+        schema = PostSchema()
         offset = 0
         while True:
             resp = requests.get(self.url, params=dict(o=offset)).json()
             for post in resp:
-                yield post
+                yield schema.load(post)
             if len(resp) > 0:
                 offset += 25
             else:
                 break
 
-    def generate_posts_dataclass(self):
-        """Transitional, yield the dataclass version of posts"""
-        schema = PostSchema()
-        for post in self.generate_posts():
-            yield schema.load(post)
-
     def for_json(self):
-        """JSON convert method for simplejson"""
+        """JSON convert method for simplejson
+
+        Returns:
+            str: json ref of the user object
+        """
         return UserSchema().dump(self)
 
+    def limit_posts(self, limit: Optional[int] = None) -> Iterator[Post]:
+        """Limit the number of posts pulled, this will restrict the number of API calls
+
+        Args:
+            limit: number of posts to check
+        Yields:
+            Post
+        """
+        return islice(self.generate_posts(), limit)
+
+    def write_info(self, options: Optional[dict] = None) -> None:
+        """Write out user details for pull options
+
+        Args:
+            options: The cli options used or None
+        """
+        with open(f"{self.name}/.info", "w", encoding="utf-8") as info_out:
+            info_out.write(
+                json.dumps(
+                    dict(user=self, options=options),
+                    for_json=True,
+                )
+            )
+
+    @cached_property
+    def posts(self) -> List[Post]:
+        """Posts property, not as memory efficient as using the generator"""
+        return list(self.generate_posts())
+
     @property
-    def url(self):
+    def url(self) -> str:
         """URL builder for self"""
         return f"{self.site}/api/{self.service}/user/{self.id}"
 
