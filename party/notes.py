@@ -65,7 +65,6 @@ def pull_user(
         base_url=base_url,
         post_id=post_id,
     )
-    logger.debug(f"User found: {user.name}, parsing posts...")
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = user.limit_posts(limit)
         files = [f for p in posts for f in p.get_files(include_files)]
@@ -74,28 +73,28 @@ def pull_user(
                 x["name"].endswith(i) for i in ignore_extensions
             )
             files = list(filter(filter_, files))
-    if post_id is None:
-        fn_set = {i.name for i in files}
-        if len(files) > len(fn_set):
-            typer.secho(
-                "Duplicate files found, updating post_id bool",
-                fg=typer.colors.BRIGHT_RED,
-            )
-            post_id = True
-    user.write_info(options)
-    if post_id:
-        new_files = {}
-        for ref in files:
-            ref.name = f"{ref.post_id}_{ref.name}"
-            if ref.name not in new_files:
-                new_files[ref.name] = ref
-        files = list(new_files.values())
-    if exclude_external:
-        files = [i for i in files if "//" not in i.name]
-    else:
-        for i in files:
-            if "//" in i.name:
-                i.name = i.name.split("/").pop()
+        if post_id is None:
+            fn_set = {i.name for i in files}
+            if len(files) > len(fn_set):
+                typer.secho(
+                    "Duplicate files found, updating post_id bool",
+                    fg=typer.colors.BRIGHT_RED,
+                )
+                post_id = True
+        user.write_info(options)
+        if post_id:
+            new_files = {}
+            for ref in files:
+                ref.name = f"{ref.post_id}_{ref.name}"
+                if ref.name not in new_files:
+                    new_files[ref.name] = ref
+            files = list(new_files.values())
+        if exclude_external:
+            files = [i for i in files if "//" not in i.name]
+        else:
+            for i in files:
+                if "//" in i.name:
+                    i.name = i.name.split("/").pop()
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
@@ -232,15 +231,19 @@ def details(
     ignore_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Show user details: (post#,attachment#,files#)"""
-    user = User.get_user(base_url, service, user_id)
-    logger.info(f"User found: {user.name}, parsing posts...")
-    posts = user.posts
-    attachments = [a for p in posts for a in p.attachments]
-    files = [p.file for p in posts if p.file]
-    if ignore_extensions:
-        filter_ = lambda x: not any(x.name.endswith(i) for i in ignore_extensions)
-        attachments = list(filter(filter_, attachments))
-        files = list(filter(filter_, files))
+
+    with yaspin(text="Pulling user DB") as spin:
+        user = User.get_user(base_url, service, user_id)
+        spin.ok("✔")
+    with yaspin(text=f"User found: {user.name}; parsing posts...") as spin:
+        posts = user.posts
+        attachments = [a for p in posts for a in p.attachments]
+        files = [p.file for p in posts if p.file]
+        if ignore_extensions:
+            filter_ = lambda x: not any(x.name.endswith(i) for i in ignore_extensions)
+            attachments = list(filter(filter_, attachments))
+            files = list(filter(filter_, files))
+        spin.ok("✔")
     logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
 
 
