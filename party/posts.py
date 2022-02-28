@@ -5,7 +5,7 @@ import os
 
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import aiofiles
 import aiohttp
@@ -21,13 +21,19 @@ from .common import StatusEnum
 
 @dataclass
 class Attachment:
-    """Basic attachment dataclass"""
+    """Basic attachment dataclass
+    Attrs:
+        name: the output file name for the attachment
+        path: path on the server
+        post_id: Not in the api data, added for post_id prepending
+    """
 
     name: Optional[str]
     path: Optional[str]
     post_id: Optional[int]
 
     def __post_init__(self):
+        # Fix for some filenames containing nested paths
         if self.name and "/" in self.name:
             self.name = self.name.split("/").pop()
 
@@ -93,7 +99,8 @@ class Post:
     added: datetime
     content: str
     edited: Optional[datetime]
-    id: int
+    # Any necessary since some coomer returns string for id
+    id: Any
     published: Optional[datetime]
     service: str
     shared_file: bool
@@ -103,7 +110,7 @@ class Post:
     attachments: Dict[str, str] = field(
         metadata=desert.metadata(field=fields.Nested(AttachmentSchema, many=True))
     )
-    embed: Dict[str, str]
+    embed: Dict[Optional[Any], Optional[Any]]
     file: Dict[str, str] = field(
         metadata=desert.metadata(field=fields.Nested(AttachmentSchema))
     )
@@ -119,13 +126,9 @@ class Post:
         collection = [i for i in self.attachments]
         if include_files:
             collection.append(self.file)
-        for p in filter(None, collection):
-            p.post_id = self.id
-            yield p
-
-    def __getitem__(self, name):
-        """Temporary hold over for migration"""
-        return getattr(self, name)
+        for post in filter(None, collection):
+            post.post_id = self.id
+            yield post
 
 
 PostSchema = desert.schema_class(

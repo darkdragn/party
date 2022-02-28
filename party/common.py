@@ -1,3 +1,5 @@
+import binascii
+import random
 from enum import Enum
 
 
@@ -8,3 +10,9 @@ class StatusEnum(Enum):
     ERROR_429 = 2
     ERROR_OTHER = 3
     EXISTS = 4
+
+
+def generate_token(size=16):
+    """Generate a random token with hexadecimal digits"""
+    data = random.getrandbits(size * 8).to_bytes(size, "big")
+    return binascii.hexlify(data).decode()

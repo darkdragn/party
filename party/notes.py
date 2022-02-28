@@ -18,7 +18,7 @@ from prettytable import PrettyTable
 from tqdm import tqdm
 from yaspin import yaspin
 
-from .common import StatusEnum
+from .common import generate_token, StatusEnum
 from .user import User
 
 APP = typer.Typer(no_args_is_help=True)
@@ -29,7 +29,7 @@ def pull_user(
     service: str,
     user_id: str,
     base_url: str = "https://kemono.party",
-    include_files: bool = False,
+    files: bool = True,
     exclude_external: bool = True,
     limit: int = None,
     post_id: bool = None,
@@ -42,7 +42,7 @@ def pull_user(
         service: Ex. patreon, fantia, onlyfans
         user_id: either name or id of the user
         base_url: Swapable for coomer.party
-        include_files: add post['file'] to downloads
+        files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
         limit: limit the number of posts we pull from
         ignore_extenstions: drop files with these extenstions
@@ -60,14 +60,14 @@ def pull_user(
         os.mkdir(user.name)
     options = dict(
         ignore_extensions=ignore_extensions,
-        include_files=include_files,
+        files=files,
         exclude_external=exclude_external,
         base_url=base_url,
         post_id=post_id,
     )
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = user.limit_posts(limit)
-        files = [f for p in posts for f in p.get_files(include_files)]
+        files = [f for p in posts for f in p.get_files(files)]
         if ignore_extensions:
             filter_ = lambda x: not any(
                 x["name"].endswith(i) for i in ignore_extensions
@@ -105,8 +105,13 @@ def pull_user(
 async def download_async(pbar, base_url, user, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
+
+    token = generate_token()
     async with aiohttp.ClientSession(
-        base_url, timeout=timeout, headers={"Accept-Encoding": "identity"}
+        base_url,
+        timeout=timeout,
+        headers={"Accept-Encoding": "identity"},
+        cookies={"__ddg2": token},
     ) as session:
         semaphore = asyncio.Semaphore(workers)
 
@@ -141,7 +146,7 @@ def coomer(
         service,
         user_id,
         base,
-        include_files=files,
+        files=files,
         limit=limit,
         post_id=post_id,
         ignore_extensions=ignore_extensions,
