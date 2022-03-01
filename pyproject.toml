@@ -7,7 +7,7 @@ version_files = [
 ]
 
 [tool.poetry]
-name = "kemono"
+name = "party"
 version = "0.4.1"
 description = ""
 authors = ["darkdragn <darkdragn.cj@gmail.com>"]
@@ -39,7 +39,7 @@ black = {version = "^22.1.0", allow-prereleases = true}
 pdoc = "^10.0.1"
 
 [tool.poetry.scripts]
-party = 'party.notes:APP'
+party = 'party.cli:APP'
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
