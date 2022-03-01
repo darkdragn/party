@@ -105,6 +105,7 @@ def pull_user(
 async def download_async(pbar, base_url, user, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
+    conn = aiohttp.TCPConnector(limit_per_host=5)
 
     token = generate_token()
     async with aiohttp.ClientSession(
@@ -112,6 +113,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
         timeout=timeout,
         headers={"Accept-Encoding": "identity"},
         cookies={"__ddg2": token},
+        connector=conn,
     ) as session:
         semaphore = asyncio.Semaphore(workers)
 
