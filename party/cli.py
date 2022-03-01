@@ -134,7 +134,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
 @APP.command()
 def coomer(
     user_id: str,
-    files: bool = False,
+    files: bool = True,
     limit: int = None,
     ignore_extensions: list[str] = typer.Option(None, "-i"),
     post_id: bool = False,
