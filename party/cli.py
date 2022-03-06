@@ -8,6 +8,7 @@ import re
 import sys
 
 from typing import Counter
+from urllib3.exceptions import ConnectTimeoutError
 
 import aiohttp
 import simplejson as json
@@ -53,9 +54,13 @@ def pull_user(
     if name:
         user = User(user_id, name, service, site=base_url)
     else:
-        with yaspin().shark as spin:
-            spin.text = "Pulling user DB"
-            user = User.get_user(base_url, service, user_id)
+        try:
+            with yaspin().shark as spin:
+                spin.text = "Pulling user DB"
+                user = User.get_user(base_url, service, user_id)
+        except ConnectTimeoutError:
+            typer.secho("Connection error occured", fg=typer.colors.BRIGHT_RED)
+            typer.Exit(3)
     if not os.path.exists(user.name):
         os.mkdir(user.name)
     options = dict(
@@ -66,7 +71,8 @@ def pull_user(
         post_id=post_id,
     )
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
-        posts = user.limit_posts(limit)
+        posts = list(user.limit_posts(limit))
+        embedded = [embed for p in user.posts if (embed := p.embed)]
         files = [f for p in posts for f in p.get_files(files)]
         if ignore_extensions:
             filter_ = lambda x: not any(
@@ -95,6 +101,16 @@ def pull_user(
             for i in files:
                 if "//" in i.name:
                     i.name = i.name.split("/").pop()
+    if embedded:
+        embed_filename = f"{user.name}/.embedded"
+        typer.secho(
+            f"Embedded objects found; saving to {embed_filename}",
+            fg=typer.colors.BRIGHT_MAGENTA,
+        )
+        with open(f"{user.name}/.embedded", "w", encoding="utf-8") as embed_file:
+            json.dump(embedded, embed_file)
+    with open(f"{user.name}/.posts", "w", encoding="utf-8") as posts_file:
+        json.dump(posts, posts_file, for_json=True)
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
@@ -252,6 +268,23 @@ def details(
             files = list(filter(filter_, files))
         spin.ok("✔")
     logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
+
+
+@APP.command()
+def embedded_links(
+    service: str,
+    user_id: str,
+    base_url: str = "https://kemono.party",
+    ignore_extensions: list[str] = typer.Option(None, "-i"),
+):
+    """Show user details: (post#,attachment#,files#)"""
+
+    with yaspin(text="Pulling user DB") as spin:
+        user = User.get_user(base_url, service, user_id)
+        spin.ok("✔")
+    with yaspin(text=f"User found: {user.name}; parsing posts...") as spin:
+        embedded = [embed for p in user.posts if (embed := p.embed)]
+        typer.echo(json.dumps(embedded), err=True)
 
 
 @APP.callback()

@@ -9,7 +9,8 @@ class StatusEnum(Enum):
     SUCCESS = 1
     ERROR_429 = 2
     ERROR_OTHER = 3
-    EXISTS = 4
+    ERROR_TIMEOUT = 4
+    EXISTS = 5
 
 
 def generate_token(size=16):

@@ -8,6 +8,8 @@ from itertools import islice
 
 from typing import Iterator, List, Optional
 
+# from urllib3.exceptions import ConnectTimeoutError
+
 import requests
 import simplejson as json
 from marshmallow import Schema, fields, post_load
@@ -60,7 +62,7 @@ class User:
             (i for i in users if i.service == service and getattr(i, attr) == search)
         )
 
-    def generate_posts(self) -> Iterator[Post]:
+    def generate_posts(self, raw: bool = False) -> Iterator[Post]:
         """Generator for Posts from this user
 
         Yields:
@@ -69,12 +71,14 @@ class User:
         schema = PostSchema()
         offset = 0
         while True:
-            resp = requests.get(self.url, params=dict(o=offset)).json()
+            resp = requests.get(self.url, params=dict(o=offset, limit=50)).json()
             for post in resp:
-                yield schema.load(post)
-            if len(resp) > 0:
-                offset += 25
-            else:
+                offset += 1
+                if raw:
+                    yield post
+                else:
+                    yield schema.load(post)
+            if len(resp) == 0:
                 break
 
     def for_json(self):

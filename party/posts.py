@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+from urllib3.exceptions import ConnectTimeoutError
 
 import aiofiles
 import aiohttp
@@ -86,6 +87,8 @@ class Attachment:
         except aiohttp.client_exceptions.TooManyRedirects as err:
             logger.debug(dict(error=err, filename=filename, url=self.path))
             status = StatusEnum.ERROR_OTHER
+        except ConnectTimeoutError as err:
+            status = StatusEnum.ERROR_TIMEOUT
         return status
 
 
@@ -129,6 +132,10 @@ class Post:
         for post in filter(None, collection):
             post.post_id = self.id
             yield post
+
+    def for_json(self):
+        """Simplejson export method"""
+        return PostSchema().dump(self)
 
 
 PostSchema = desert.schema_class(
