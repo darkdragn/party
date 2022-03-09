@@ -22,7 +22,7 @@ from .posts import Post, PostSchema
 class User:
     """Storage class for User data and functions"""
 
-    id: str
+    id: str  # pylint: disable=invalid-name
     name: str
     service: str
     indexed: datetime = datetime.now()
@@ -136,7 +136,7 @@ class UserSchema(Schema):
     url = fields.Str(required=False)
 
     @post_load
-    def create_user(self, data, **kwargs):
+    def create_user(self, data, many, partial):
         """Deserialize wrapper for creating User Dataclass"""
         if self.context:
             return User(site=self.context["site"], **data)

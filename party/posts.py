@@ -5,6 +5,8 @@ import os
 
 from datetime import datetime
 from dataclasses import dataclass, field
+
+# from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib3.exceptions import ConnectTimeoutError
 
@@ -49,13 +51,19 @@ class Attachment:
     def __bool__(self):
         return bool(self.name)
 
-    async def download(self, session, filename: str = "."):
+    async def download(self, session, filename: str = ".", retries: int = 0):
         """Async download handler"""
         status = StatusEnum.SUCCESS
+        # headers = {}
+        start = 0
+        if os.path.exists(filename):
+            start = os.stat(filename).st_size
+        headers = dict(Range=f"bytes={start}-")
         try:
-            async with session.get(self.path) as resp:
-                if resp.status == 200:
+            async with session.get(self.path, headers=headers) as resp:
+                if 200 < resp.status < 300:
                     fbar = tqdm(
+                        initial=start,
                         desc=filename,
                         total=int(resp.headers["content-length"]),
                         unit="b",
@@ -77,8 +85,11 @@ class Attachment:
                     except aiohttp.client_exceptions.ClientPayloadError as err:
                         logger.debug(dict(error=err, filename=filename, url=self.path))
                         fbar.close()
-                        os.remove(filename)
-                        status = StatusEnum.ERROR_OTHER
+                        if retries > 2:
+                            status = await self.download(session, filename, retries + 1)
+                        else:
+                            # os.remove(filename)
+                            status = StatusEnum.ERROR_OTHER
                 else:
                     logger.debug(
                         dict(status=resp.status, filename=filename, url=self.path)
@@ -126,7 +137,7 @@ class Post:
         Yields:
             Attachment
         """
-        collection = [i for i in self.attachments]
+        collection = list(self.attachments)
         if include_files:
             collection.append(self.file)
         for post in filter(None, collection):

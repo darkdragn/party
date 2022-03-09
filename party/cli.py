@@ -220,7 +220,12 @@ def search(
 
 
 @APP.command()
-def custom_parse(service: str, user_id: str, search: str, limit: int = None):
+def custom_parse(
+    service: str,
+    user_id: str,
+    search: str,  # pylint: disable=redefined-outer-name
+    limit: int = None,
+):
     """Uses provided regex to pull links from the content key on posts"""
     user = User.get_user("https://kemono.party", service, user_id)
     if not os.path.exists(user.name):
@@ -275,7 +280,6 @@ def embedded_links(
     service: str,
     user_id: str,
     base_url: str = "https://kemono.party",
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Show user details: (post#,attachment#,files#)"""
 
