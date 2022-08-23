@@ -48,6 +48,9 @@ class Attachment:
     def __bool__(self):
         return bool(self.name)
 
+    def for_json(self):
+        return { "name": self.name, "path": self.path, "post_id": self.post_id}
+
     async def download(self, session, filename: str = "."):
         """Async download handler"""
         status = StatusEnum.SUCCESS
@@ -78,6 +81,10 @@ class Attachment:
                         fbar.close()
                         os.remove(filename)
                         status = StatusEnum.ERROR_OTHER
+                    except OSError as err:
+                        logger.debug(dict(error=err, filename=filename, url=self.path))
+                        fbar.close()
+                        status = StatusEnum.ERROR_OSERROR
                 else:
                     logger.debug(
                         dict(status=resp.status, filename=filename, url=self.path)

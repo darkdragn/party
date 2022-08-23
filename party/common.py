@@ -9,6 +9,7 @@ class StatusEnum(Enum):
     SUCCESS = 1
     ERROR_429 = 2
     ERROR_OTHER = 3
+    ERROR_OSERROR = 5
     EXISTS = 4
 
 

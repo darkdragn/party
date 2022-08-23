@@ -95,6 +95,8 @@ def pull_user(
             for i in files:
                 if "//" in i.name:
                     i.name = i.name.split("/").pop()
+    with open(f"{user.name}/.posts", 'w') as post_out:
+        json.dump(files, post_out, for_json=True)
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
