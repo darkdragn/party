@@ -90,6 +90,10 @@ class Attachment:
                         else:
                             # os.remove(filename)
                             status = StatusEnum.ERROR_OTHER
+                    except OSError as err:
+                        logger.debug(dict(error=err, filename=filename, url=self.path))
+                        fbar.close()
+                        status = StatusEnum.ERROR_OSERROR
                 else:
                     logger.debug(
                         dict(status=resp.status, filename=filename, url=self.path)

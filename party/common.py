@@ -11,6 +11,7 @@ class StatusEnum(Enum):
     ERROR_OTHER = 3
     ERROR_TIMEOUT = 4
     EXISTS = 5
+    ERROR_OSERROR = 6
 
 
 def generate_token(size=16):
