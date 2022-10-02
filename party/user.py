@@ -6,13 +6,14 @@ from datetime import datetime
 from functools import cached_property
 from itertools import islice
 
+from numbers import Number
 from typing import Iterator, List, Optional
 
 # from urllib3.exceptions import ConnectTimeoutError
 
 import requests
 import simplejson as json
-from marshmallow import Schema, fields, post_load
+from marshmallow import Schema, fields, post_load, EXCLUDE, pre_load
 
 # from .notes import populate_posts
 from .posts import Post, PostSchema
@@ -71,14 +72,20 @@ class User:
         schema = PostSchema()
         offset = 0
         while True:
-            resp = requests.get(self.url, params=dict(o=offset, limit=50)).json()
-            for post in resp:
+            resp = requests.get(self.url, params=dict(o=offset, limit=50))
+            try:
+                posts = resp.json()
+            except requests.exceptions.JSONDecodeError as e:
+                print(resp.request.url)
+                print(resp.request.url)
+                raise e
+            for post in posts:
                 offset += 1
                 if raw:
                     yield post
                 else:
                     yield schema.load(post)
-            if len(resp) == 0:
+            if len(posts) == 0:
                 break
 
     def for_json(self):
@@ -135,9 +142,20 @@ class UserSchema(Schema):
     updated = fields.DateTime("%a, %d %b %Y %H:%M:%S %Z")
     url = fields.Str(required=False)
 
+    @pre_load
+    def check_dates(self, data, **kwargs):
+        if isinstance(data['updated'], Number):
+            data['updated'] = datetime.fromtimestamp(data['updated']).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        if isinstance(data['indexed'], Number):
+            data['indexed'] = datetime.fromtimestamp(data['indexed']).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        return data
+
     @post_load
     def create_user(self, data, many, partial):
         """Deserialize wrapper for creating User Dataclass"""
         if self.context:
             return User(site=self.context["site"], **data)
         return User(**data)
+
+    class Meta:
+        unknown = EXCLUDE
