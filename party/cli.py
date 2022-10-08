@@ -91,7 +91,7 @@ def pull_user(
         if post_id:
             new_files = {}
             for ref in files:
-                ref.name = f"{ref.post_id}_{ref.name}"
+                ref.filename = f"{ref.post_id}_{ref.name}"
                 if ref.name not in new_files:
                     new_files[ref.name] = ref
             files = list(new_files.values())
@@ -121,20 +121,28 @@ def pull_user(
 async def download_async(pbar, base_url, user, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
-    conn = aiohttp.TCPConnector(limit_per_host=5)
+    conn = aiohttp.TCPConnector(limit_per_host=2)
 
     token = generate_token()
     async with aiohttp.ClientSession(
         base_url,
         timeout=timeout,
-        headers={"Accept-Encoding": "identity"},
+        headers={
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "no-cache",
+            "pragma": "no-cache",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
+            "Safari/537.36"
+        },
         cookies={"__ddg2": token},
+        # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
         connector=conn,
     ) as session:
         semaphore = asyncio.Semaphore(workers)
 
         async def download(file):
-            filename = f"{user}/{file.name}"
+            filename = f"{user}/{file.filename}"
             if os.path.exists(filename):
                 pbar.update(1)
                 return StatusEnum.EXISTS
@@ -245,7 +253,7 @@ def update(folder: str, limit: int = None):
         settings["user"]["service"],
         settings["user"]["id"],
         name=settings["user"]["name"],
-        workers=6,
+        workers=4,
         limit=limit,
         **settings["options"],
     )
@@ -297,7 +305,7 @@ def configure(verbose: bool = False):
     if verbose:
         return
     logger.remove()
-    logger.add(sys.stderr, level="INFO")
+    logger.add(sys.stderr, level="DEBUG")
 
 
 if __name__ == "__main__":

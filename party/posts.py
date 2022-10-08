@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 # from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 from urllib3.exceptions import ConnectTimeoutError
 
 import aiofiles
@@ -31,14 +32,17 @@ class Attachment:
         post_id: Not in the api data, added for post_id prepending
     """
 
+    filename: Optional[str]
     name: Optional[str]
     path: Optional[str]
     post_id: Optional[int]
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
-        if self.name and "/" in self.name:
-            self.name = self.name.split("/").pop()
+        if not self.filename:
+            self.filename = self.name
+        if self.filename and "/" in self.filename:
+            self.filename = self.filename.split("/").pop()
 
     def __getitem__(self, name):
         """Temporary hold over for migration"""
@@ -54,14 +58,18 @@ class Attachment:
     async def download(self, session, filename: str = ".", retries: int = 0):
         """Async download handler"""
         status = StatusEnum.SUCCESS
-        # headers = {}
+        headers = {}
         start = 0
         if os.path.exists(filename):
             start = os.stat(filename).st_size
-        headers = dict(Range=f"bytes={start}-")
+        headers = dict(
+            Range=f"bytes={start}-",
+            referer='https://kemono.party/'
+        )
+        # query_name = self.name
         try:
-            async with session.get(self.path, headers=headers) as resp:
-                if 200 < resp.status < 300:
+            async with session.get(self.path + "?f=" + quote(self.name), headers=headers) as resp:
+                if 199 < resp.status < 300:
                     fbar = tqdm(
                         initial=start,
                         desc=filename,
@@ -96,7 +104,8 @@ class Attachment:
                         status = StatusEnum.ERROR_OSERROR
                 else:
                     logger.debug(
-                        dict(status=resp.status, filename=filename, url=self.path)
+                        dict(status=resp.status, filename=filename,
+                            url=resp.url, headers=resp.headers)
                     )
                     status = StatusEnum.ERROR_429
         except aiohttp.client_exceptions.TooManyRedirects as err:
