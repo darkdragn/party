@@ -70,7 +70,7 @@ You can either clone the repo or install from Releases.
 
 1. Just do it, I guess. \shrugs (This is the latest link as of this post, check releases)
    ```sh
-   pip install https://github.com/darkdragn/party/releases/download/v0.4.2/party-0.4.2-py3-none-any.whl
+   pip install https://github.com/darkdragn/party/releases/download/v0.4.3/party-0.4.3-py3-none-any.whl
    ```
 
 #### Installation from source
