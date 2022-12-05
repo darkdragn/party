@@ -34,11 +34,13 @@ def pull_user(
     exclude_external: bool = True,
     limit: int = None,
     post_id: bool = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    workers: int = typer.Option(8, "-w"),
+    ignore_extensions: list[str] = typer.Option(None, "-i", "--ignore-extenstions"),
+    workers: int = typer.Option(8, "-w", "--workers"),
     name: str = None,
 ):
     """Quick download command for kemono.party
+    
+    \b
     Args:
         service: Ex. patreon, fantia, onlyfans
         user_id: either name or id of the user
@@ -47,7 +49,7 @@ def pull_user(
         exclude_external: filter out files not hosted on *.party
         limit: limit the number of posts we pull from
         ignore_extenstions: drop files with these extenstions
-        workers: number of open connections allowed
+        workers: number of download workers handling open connections
         name: skip downloading the user db, generate user with name, service, user_id
     """
     logger.debug(f"Ignored Extensions: {ignore_extensions}")
