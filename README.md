@@ -115,8 +115,11 @@ You can either clone the repo or install from Releases.
 
 - Download something from coomer
   ```sh
-  # party coomer <creator> [options] // only service is onlyfans so no service on this
-  party coomer belledelphine
+  # party coomer <service> <creator> [options] // only service used to be onlyfans, but now fansly is supported
+  party coomer onlyfans belledelphine
+
+  # Second example for fansly
+  party coomer fansly forgottenlovechild
   ```
 
 - Update an existing directory
