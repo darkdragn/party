@@ -150,4 +150,13 @@ You can either clone the repo or install from Releases.
    0%|          | 1/909 [00:00<11:57
   ```
 
+- A more specific search
+  ```sh
+  party search --site coomer --service fansly forgotten
+  +-------+--------------------+--------------------+---------+
+  | Index |        Name        |         ID         | Service |
+  +-------+--------------------+--------------------+---------+
+  |   0   | forgottenlovechild | 434514358358253568 |  fansly |
+  +-------+--------------------+--------------------+---------+
+  ```
 <p align="right">(<a href="#top">back to top</a>)</p>
