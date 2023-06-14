@@ -17,6 +17,7 @@ import typer
 from loguru import logger
 from prettytable import PrettyTable
 from tqdm import tqdm
+from typing_extensions import Annotated
 from yaspin import yaspin
 
 from .common import generate_token, StatusEnum
@@ -25,9 +26,9 @@ from .user import User
 APP = typer.Typer(no_args_is_help=True)
 
 
-@APP.command(name="kemono")
+@APP.command(name="kemono", no_args_is_help=True)
 def pull_user(
-    service: str,
+    service: Annotated[str, typer.Argument(help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)")],
     user_id: str,
     base_url: str = "https://kemono.party",
     files: bool = True,
@@ -39,16 +40,6 @@ def pull_user(
     name: str = None,
 ):
     """Quick download command for kemono.party
-    Args:
-        service: Ex. patreon, fantia, onlyfans
-        user_id: either name or id of the user
-        base_url: Swapable for coomer.party
-        files: add post['file'] to downloads
-        exclude_external: filter out files not hosted on *.party
-        limit: limit the number of posts we pull from
-        ignore_extenstions: drop files with these extenstions
-        workers: number of open connections allowed
-        name: skip downloading the user db, generate user with name, service, user_id
     """
     logger.debug(f"Ignored Extensions: {ignore_extensions}")
     if name:
