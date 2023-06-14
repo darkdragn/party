@@ -34,13 +34,11 @@ def pull_user(
     exclude_external: bool = True,
     limit: int = None,
     post_id: bool = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i", "--ignore-extenstions"),
+    ignore_extensions: list[str] = typer.Option(None, "-i", "--ignore-etenstions"),
     workers: int = typer.Option(8, "-w", "--workers"),
     name: str = None,
 ):
     """Quick download command for kemono.party
-    
-    \b
     Args:
         service: Ex. patreon, fantia, onlyfans
         user_id: either name or id of the user
@@ -49,7 +47,7 @@ def pull_user(
         exclude_external: filter out files not hosted on *.party
         limit: limit the number of posts we pull from
         ignore_extenstions: drop files with these extenstions
-        workers: number of download workers handling open connections
+        workers: number of open connections allowed
         name: skip downloading the user db, generate user with name, service, user_id
     """
     logger.debug(f"Ignored Extensions: {ignore_extensions}")
@@ -158,7 +156,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
 
 
 @APP.command()
-def coomer(
+def onlyfans(
     user_id: str,
     files: bool = True,
     limit: int = None,
@@ -170,6 +168,33 @@ def coomer(
     """Convenience command for running against coomer, Onlyfans"""
     base = "https://coomer.party"
     service = "onlyfans"
+    pull_user(
+        service,
+        user_id,
+        base,
+        files=files,
+        limit=limit,
+        post_id=post_id,
+        ignore_extensions=ignore_extensions,
+        workers=workers,
+        name=name,
+    )
+
+
+@APP.command()
+def coomer(
+    service: str,
+    user_id: str,
+    files: bool = True,
+    limit: int = None,
+    ignore_extensions: list[str] = typer.Option(None, "-i"),
+    post_id: bool = False,
+    workers: int = typer.Option(10, "-w"),
+    name: str = None,
+):
+    """Convenience command for running against coomer, services[fansly,onlyfans]"""
+    base = "https://coomer.party"
+    # service = "onlyfans"
     pull_user(
         service,
         user_id,
