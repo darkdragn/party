@@ -49,7 +49,7 @@ class User:
     @classmethod
     def get_user(cls, base_url: str, service: str, search: str):
         """Return a User object from a match against service and search.
-    
+
         Args:
             base_url: kemono.party or coomer.party
             service: { kemono: [patreon, fanbox, fantia, etc...], coomer: [onlyfans]}
