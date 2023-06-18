@@ -46,19 +46,25 @@ class User:
         resp = requests.get(f"{base_url}/api/creators")
         return UserSchema(context=dict(site=base_url)).loads(resp.text, many=True)
 
-    @classmethod
-    def get_user(cls, base_url: str, service: str, search: str):
-        """Return a User object from a match against service and search.
+@classmethod
+def get_user(cls, base_url: str, service: str, search: str):
+    """Return a User object from a match against service and search.
 
-        Args:
-            base_url: kemono.party or coomer.party
-            service: { kemono: [patreon, fanbox, fantia, etc...], coomer: [onlyfans]}
-            search: user id or user name
-        Returns:
-            User
-        """
-        users = cls.generate_users(base_url)
-        attr = "id" if search.isnumeric() else "name"
+    Args:
+        base_url: kemono.party or coomer.party
+        service: { kemono: [patreon, fanbox, fantia, etc...], coomer: [onlyfans]}
+        search: user id or user name
+    Returns:
+        User
+    """
+    users = cls.generate_users(base_url)
+    try:
+        attr = "id"
+        return next(
+            (i for i in users if i.service == service and getattr(i, attr) == search)
+        )
+    except StopIteration:
+        attr = "name"
         return next(
             (i for i in users if i.service == service and getattr(i, attr) == search)
         )
