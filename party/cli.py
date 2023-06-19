@@ -28,19 +28,47 @@ APP = typer.Typer(no_args_is_help=True)
 
 @APP.command(name="kemono", no_args_is_help=True)
 def pull_user(
-    service: Annotated[str, typer.Argument(help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)")],
-    user_id: str,
-    base_url: str = "https://kemono.party",
+    service: Annotated[
+        str,
+        typer.Argument(
+            help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
+        ),
+    ],
+    user_id: Annotated[
+        str, typer.Argument(help="User id from the url or name from search")
+    ],
+    base_url: Annotated[
+        str,
+        typer.Option(
+            help="Base for the site. Default is kemono.party but you can set it to https://coomer.party",
+        ),
+    ] = "https://kemono.party",
     files: bool = True,
     exclude_external: bool = True,
-    limit: int = None,
+    limit: Annotated[
+        int,
+        typer.Option(
+            "-l",
+            "--limit",
+            help="Number of posts to parse. Starts from newest to oldest.",
+        ),
+    ] = None,
     post_id: bool = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i", "--ignore-etenstions"),
-    workers: int = typer.Option(8, "-w", "--workers"),
-    name: str = None,
+    ignore_extensions: list[str] = typer.Option(
+        [], "-i", "--ignore-extenstions", help="File extensions to ignore"
+    ),
+    workers: int = typer.Option(
+        8, "-w", "--workers", help="Number of open download connections"
+    ),
+    name: Annotated[
+        str,
+        typer.Option(
+            help="If you provided an id in the argument, you can provide a name here to skip user db pull/search",
+        ),
+    ] = None,
+    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
 ):
-    """Quick download command for kemono.party
-    """
+    """Quick download command for kemono.party"""
     logger.debug(f"Ignored Extensions: {ignore_extensions}")
     if name:
         user = User(user_id, name, service, site=base_url)
@@ -52,14 +80,18 @@ def pull_user(
         except ConnectTimeoutError:
             typer.secho("Connection error occured", fg=typer.colors.BRIGHT_RED)
             typer.Exit(3)
-    if not os.path.exists(user.name):
-        os.mkdir(user.name)
+    if not directory:
+        directory = user.name
+    user.directory = directory
+    if not os.path.exists(directory):
+        os.mkdir(directory)
     options = dict(
         ignore_extensions=ignore_extensions,
         files=files,
         exclude_external=exclude_external,
         base_url=base_url,
         post_id=post_id,
+        directory=directory,
     )
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = list(user.limit_posts(limit))
@@ -93,23 +125,23 @@ def pull_user(
                 if "//" in i.name:
                     i.name = i.name.split("/").pop()
     if embedded:
-        embed_filename = f"{user.name}/.embedded"
+        embed_filename = f"{directory}/.embedded"
         typer.secho(
             f"Embedded objects found; saving to {embed_filename}",
             fg=typer.colors.BRIGHT_MAGENTA,
         )
-        with open(f"{user.name}/.embedded", "w", encoding="utf-8") as embed_file:
+        with open(f"{directory}/.embedded", "w", encoding="utf-8") as embed_file:
             json.dump(embedded, embed_file)
-    with open(f"{user.name}/.posts", "w", encoding="utf-8") as posts_file:
+    with open(f"{directory}/.posts", "w", encoding="utf-8") as posts_file:
         json.dump(posts, posts_file, for_json=True)
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
-        output = asyncio.run(download_async(pbar, base_url, user.name, files, workers))
+        output = asyncio.run(download_async(pbar, base_url, directory, files, workers))
     count = Counter(output)
     logger.info(f"Output status: {count}")
 
 
-async def download_async(pbar, base_url, user, files, workers: int = 10):
+async def download_async(pbar, base_url, directory, files, workers: int = 10):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
     conn = aiohttp.TCPConnector(limit_per_host=2)
@@ -124,7 +156,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
             "pragma": "no-cache",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
-            "Safari/537.36"
+            "Safari/537.36",
         },
         cookies={"__ddg2": token},
         # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
@@ -133,7 +165,7 @@ async def download_async(pbar, base_url, user, files, workers: int = 10):
         semaphore = asyncio.Semaphore(workers)
 
         async def download(file):
-            filename = f"{user}/{file.filename}"
+            filename = f"{directory}/{file.filename}"
             if os.path.exists(filename):
                 pbar.update(1)
                 return StatusEnum.EXISTS
@@ -155,6 +187,7 @@ def onlyfans(
     post_id: bool = False,
     workers: int = typer.Option(10, "-w"),
     name: str = None,
+    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
 ):
     """Convenience command for running against coomer, Onlyfans"""
     base = "https://coomer.party"
@@ -169,6 +202,7 @@ def onlyfans(
         ignore_extensions=ignore_extensions,
         workers=workers,
         name=name,
+        directory=directory,
     )
 
 
@@ -182,6 +216,7 @@ def coomer(
     post_id: bool = False,
     workers: int = typer.Option(10, "-w"),
     name: str = None,
+    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = "https://coomer.party"
@@ -196,6 +231,7 @@ def coomer(
         ignore_extensions=ignore_extensions,
         workers=workers,
         name=name,
+        directory=directory,
     )
 
 

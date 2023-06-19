@@ -30,6 +30,7 @@ class User:
     updated: datetime = datetime.now()
 
     site: str = None
+    directory: str = None
 
     def __eq__(self, other):
         output = False
@@ -118,7 +119,7 @@ class User:
         Args:
             options: The cli options used or None
         """
-        with open(f"{self.name}/.info", "w", encoding="utf-8") as info_out:
+        with open(f"{self.directory}/.info", "w", encoding="utf-8") as info_out:
             info_out.write(
                 json.dumps(
                     dict(user=self, options=options),
@@ -140,6 +141,7 @@ class User:
 class UserSchema(Schema):
     """User Schema for parsing user objects from a party site (kemono/coomer)"""
 
+    directory: str = fields.Str(required=False)
     id: str = fields.Str()
     indexed = fields.DateTime("%a, %d %b %Y %H:%M:%S %Z")
     name: str = fields.Str()
