@@ -58,10 +58,16 @@ class User:
             User
         """
         users = cls.generate_users(base_url)
-        attr = "id" if search.isnumeric() else "name"
-        return next(
-            (i for i in users if i.service == service and getattr(i, attr) == search)
-        )
+        try:
+            attr = "id"
+            return next(
+                (i for i in users if i.service == service and getattr(i, attr) == search)
+            )
+        except StopIteration:
+            attr = "name"
+            return next(
+                (i for i in users if i.service == service and getattr(i, attr) == search)
+            )
 
     def generate_posts(self, raw: bool = False) -> Iterator[Post]:
         """Generator for Posts from this user
