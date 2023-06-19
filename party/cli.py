@@ -58,7 +58,7 @@ def pull_user(
         [], "-i", "--ignore-extenstions", help="File extensions to ignore"
     ),
     workers: int = typer.Option(
-        8, "-w", "--workers", help="Number of open download connections"
+        4, "-w", "--workers", help="Number of open download connections"
     ),
     name: Annotated[
         str,
@@ -66,7 +66,9 @@ def pull_user(
             help="If you provided an id in the argument, you can provide a name here to skip user db pull/search",
         ),
     ] = None,
-    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
+    directory: Annotated[
+        str, typer.Option("-d", "--directory", help="Specify an output directory")
+    ] = None,
 ):
     """Quick download command for kemono.party"""
     logger.debug(f"Ignored Extensions: {ignore_extensions}")
@@ -214,9 +216,11 @@ def coomer(
     limit: int = None,
     ignore_extensions: list[str] = typer.Option(None, "-i"),
     post_id: bool = False,
-    workers: int = typer.Option(10, "-w"),
+    workers: int = typer.Option(2, "-w"),
     name: str = None,
-    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
+    directory: Annotated[
+        str, typer.Option("-d", "--directory", help="Specify an output directory")
+    ] = None,
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = "https://coomer.party"
