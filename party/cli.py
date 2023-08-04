@@ -55,7 +55,7 @@ def pull_user(
     ] = None,
     post_id: bool = None,
     ignore_extensions: list[str] = typer.Option(
-        [], "-i", "--ignore-extenstions", help="File extensions to ignore"
+        [], "-i", "--ignore-extensions", help="File extensions to ignore"
     ),
     workers: int = typer.Option(
         4, "-w", "--workers", help="Number of open download connections"
