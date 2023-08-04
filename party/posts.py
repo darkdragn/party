@@ -35,7 +35,7 @@ class Attachment:
     filename: Optional[str]
     name: Optional[str]
     path: Optional[str]
-    post_id: Optional[int]
+    post_id: Optional[str]
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
@@ -126,8 +126,8 @@ class Post:
     added: datetime
     content: str
     edited: Optional[datetime]
-    # Any necessary since some coomer returns string for id
-    id: Any
+    # str necessary since some coomer returns string for id
+    id: str 
     published: Optional[datetime]
     service: str
     shared_file: bool
