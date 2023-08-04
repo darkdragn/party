@@ -109,7 +109,7 @@ You can either clone the repo or install from Releases.
         files: add post['file'] to downloads
         exclude_external: filter out files not hosted on *.party
         limit: limit the number of posts we pull from
-        ignore_extenstions: drop files with these extenstions
+        ignore_extensions: drop files with these extensions
         workers: number of open connections allowed
         name: skip downloading the user db, generate user with name, service, user_id
 
