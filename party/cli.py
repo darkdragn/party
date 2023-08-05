@@ -25,52 +25,19 @@ from .user import User
 
 APP = typer.Typer(no_args_is_help=True)
 
-
-@APP.command(name="kemono", no_args_is_help=True)
 def pull_user(
-    service: Annotated[
-        str,
-        typer.Argument(
-            help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
-        ),
-    ],
-    user_id: Annotated[
-        str, typer.Argument(help="User id from the url or name from search")
-    ],
-    base_url: Annotated[
-        str,
-        typer.Option(
-            help="Base for the site. Default is kemono.party but you can set it to https://coomer.party",
-        ),
-    ] = "https://kemono.party",
+    service: str,
+    user_id: str, 
+    base_url: str,
     files: bool = True,
     exclude_external: bool = True,
-    limit: Annotated[
-        int,
-        typer.Option(
-            "-l",
-            "--limit",
-            help="Number of posts to parse. Starts from newest to oldest.",
-        ),
-    ] = None,
+    limit: int = None,
     post_id: bool = None,
-    ignore_extensions: list[str] = typer.Option(
-        [], "-i", "--ignore-extensions", help="File extensions to ignore"
-    ),
-    workers: int = typer.Option(
-        4, "-w", "--workers", help="Number of open download connections"
-    ),
-    name: Annotated[
-        str,
-        typer.Option(
-            help="If you provided an id in the argument, you can provide a name here to skip user db pull/search",
-        ),
-    ] = None,
-    directory: Annotated[
-        str, typer.Option("-d", "--directory", help="Specify an output directory")
-    ] = None,
+    ignore_extensions: list[str] = [], 
+    workers: int = 4,
+    name: str = None,
+    directory: str = None
 ):
-    """Quick download command for kemono.party"""
     logger.debug(f"Ignored Extensions: {ignore_extensions}")
     if name:
         user = User(user_id, name, service, site=base_url)
@@ -179,21 +146,57 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
         downloads = [download(f) for f in files]
         return await asyncio.gather(*downloads)
 
-
 @APP.command()
-def onlyfans(
-    user_id: str,
+def kemono(
+    service: Annotated[
+        str, typer.Argument(
+            help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
+        )
+    ],
+    user_id: Annotated[
+        str, typer.Argument(
+            help="User id from the url or name from search"
+        )
+    ],
     files: bool = True,
-    limit: int = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    post_id: bool = False,
-    workers: int = typer.Option(10, "-w"),
-    name: str = None,
-    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
+    limit: Annotated[
+        int, typer.Option(
+            "-l",
+            "--limit",
+            help="Number of posts to parse. Starts from newest to oldest."
+        )
+    ] = None,
+    post_id: bool = None,
+    ignore_extensions: Annotated[
+        list[str], typer.Option(
+            "-i",
+            "--ignore-extensions", 
+            help="File extensions to ignore"
+        )
+    ] = [],
+    workers: Annotated[
+        int, typer.Option( 
+            "-w", 
+            "--workers", 
+            help="Number of open download connections"
+        )
+    ] = 4,
+    name: Annotated[
+        str, typer.Option(
+            "--name",
+            help="If you provided an id in the argument, you can provide a name here to skip user db pull/search"
+        ),
+    ] = None,
+    directory: Annotated[
+        str, typer.Option(
+            "-d",
+            "--directory", 
+            help="Specify an output directory"
+        )
+    ] = None
 ):
-    """Convenience command for running against coomer, Onlyfans"""
-    base = "https://coomer.party"
-    service = "onlyfans"
+    """Quick download command for kemono.party"""
+    base = "https://kemono.party"
     pull_user(
         service,
         user_id,
@@ -207,24 +210,57 @@ def onlyfans(
         directory=directory,
     )
 
-
 @APP.command()
 def coomer(
-    service: str,
-    user_id: str,
+    service: Annotated[
+        str, typer.Argument(
+            help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
+        )
+    ],
+    user_id: Annotated[
+        str, typer.Argument(
+            help="User id from the url or name from search"
+        )
+    ],
     files: bool = True,
-    limit: int = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    post_id: bool = False,
-    workers: int = typer.Option(2, "-w"),
-    name: str = None,
-    directory: Annotated[
-        str, typer.Option("-d", "--directory", help="Specify an output directory")
+    limit: Annotated[
+        int, typer.Option(
+            "-l",
+            "--limit",
+            help="Number of posts to parse. Starts from newest to oldest."
+        )
     ] = None,
+    post_id: bool = None,
+    ignore_extensions: Annotated[
+        list[str], typer.Option(
+            "-i",
+            "--ignore-extensions", 
+            help="File extensions to ignore"
+        )
+    ] = [],
+    workers: Annotated[
+        int, typer.Option( 
+            "-w", 
+            "--workers", 
+            help="Number of open download connections"
+        )
+    ] = 4,
+    name: Annotated[
+        str, typer.Option(
+            "--name",
+            help="If you provided an id in the argument, you can provide a name here to skip user db pull/search"
+        ),
+    ] = None,
+    directory: Annotated[
+        str, typer.Option(
+            "-d",
+            "--directory", 
+            help="Specify an output directory"
+        )
+    ] = None
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = "https://coomer.party"
-    # service = "onlyfans"
     pull_user(
         service,
         user_id,
@@ -241,18 +277,46 @@ def coomer(
 
 @APP.command(no_args_is_help=True)
 def search(
-    search_str: str,
-    site: str = None,
-    service: str = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    interactive: bool = typer.Option(False, "-i", "--interactive"),
+    search_str: Annotated[
+        str, typer.Argument(
+            help="Search string to match against usernames"
+        )
+    ]=None,
+    site: Annotated[
+        str, typer.Option(
+            "--site", 
+            help="Specify the site to pull from; default to kemono."
+        )
+    ]=None,
+    service: Annotated[
+        str, typer.Option(
+            "--service", 
+            help="Specify service (e.g. pixiv, onlyfans, fansly, etc)."
+    )
+    ]=None,
+    ignore_extensions: Annotated[
+        list[str], typer.Option(
+            "-i",
+            "--ignore-extensions", 
+            help="File extensions to ignore"
+        )
+    ] = [],
+    interactive: Annotated[
+        bool, typer.Option(
+            "-I",
+            "--interactive", 
+            help = "Prompt for selection from results."
+        )
+    ]=False,
+    workers: Annotated[
+        int, typer.Option( 
+            "-w", 
+            "--workers", 
+            help="Number of open download connections"
+        )
+    ] = 4
 ):
-    """Search function
-    Args:
-        search_str: used to filter users against name.lower()
-        site: default to kemono, if string 'coomer' user the coomer url
-        service: service name to filter users against [patreon,fantia,fanbox,etc...]
-    """
+    """Search function """
     base_url = "https://kemono.party"
     if site == "coomer":
         base_url = "https://coomer.party"
@@ -272,7 +336,7 @@ def search(
         selection = typer.prompt("Index selection: ", type=int)
         user = results[selection]
         typer.secho(
-            f"Downloading {user.name} using default options...",
+            f"Downloading {user.name} with specified options...",
             fg=typer.colors.BRIGHT_GREEN,
         )
         pull_user(
@@ -280,7 +344,7 @@ def search(
             user.id,
             name=user.name,
             base_url=base_url,
-            workers=8,
+            workers=workers,
             ignore_extensions=ignore_extensions,
         )
 
