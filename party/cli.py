@@ -175,20 +175,39 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
     # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
             connector=conn,
     ) as session:
-        semaphore = asyncio.Semaphore(workers)
+        output = []
+        while len(files) != 0:
+            semaphore = asyncio.Semaphore(workers)
+            cworkers = workers
 
-        async def download(file):
-            filename = f"{directory}/{file.filename}"
-            if os.path.exists(filename):
-                pbar.update(1)
-                return StatusEnum.EXISTS
-            async with semaphore:
-                status = await file.download(session, filename)
-            pbar.update(1)
-            return status
+            async def download(file):
+                nonlocal cworkers
+                filename = f"{directory}/{file.filename}"
+                if os.path.exists(filename):
+                    pbar.update(1)
+                    return StatusEnum.EXISTS
+                async with semaphore:
+                    status = await file.download(session, filename)
+                    if status == StatusEnum.ERROR_429 and cworkers > 1:
+                        cworkers -= 1
+                        await semaphore.acquire() #decrement workers
+                if status == StatusEnum.ERROR_429:
+                    status = file
+                else:
+                    pbar.update(1)
+                return status
 
-        downloads = [download(f) for f in files]
-        return await asyncio.gather(*downloads)
+            downloads = [download(f) for f in files]
+            temp = await asyncio.gather(*downloads)
+            files.clear()
+            for stat in temp:
+                if stat != StatusEnum.SUCCESS and stat != StatusEnum.EXISTS:
+                    files.append(stat) #need to handle other errors here
+                else:
+                    output.append(stat)
+            if workers > 1:
+                workers -= 1
+        return output
 
 @APP.command()
 def kemono(
