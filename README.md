@@ -17,18 +17,20 @@
   <ol>
     <li>
       <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
     </li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">I nstallation</a></li>
+        <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
+      <ul>
+        <li><a href="#Download">Download from Kemono and Coomer</a></li>
+        <li><a href="#Update">Update</a></li>
+        <li><a href="#Search">Search</a></li>
+      </ul>
     <li><a href="#roadmap">Roadmap</a></li>
   </ol>
 </details>
@@ -105,7 +107,8 @@ You can either clone the repo or install from Releases.
   search: Find creators based on username or id
   ```
   
-**Kemono and Coomer**
+### Download
+***Kemono and Coomer***
 
   A basic breakdown of the options
   > party \<site> \<service> \<creator> [options]
@@ -139,7 +142,7 @@ Examples
 
 Party will check for existing files while downloading, so incomplete archives can be completed with kemono/coomer or with update. 
 
-**Update**
+### Update
 
 - Update an existing directory
   ```sh
@@ -148,7 +151,7 @@ Party will check for existing files while downloading, so incomplete archives ca
   - This will skip creator list download, since we have that data.
   - If the creator was initially downloaded with extensions excluded (option -e), update will retain those exclusions.
 
-**Search**
+### Search
 
 Search supports all options kemono and coomer take, e.g. -e, -w, -d, -l
 
