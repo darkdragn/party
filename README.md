@@ -27,9 +27,9 @@
     </li>
     <li><a href="#usage">Usage</a></li>
       <ul>
-        <li><a href="#Download">Download from Kemono and Coomer</a></li>
-        <li><a href="#Update">Update</a></li>
-        <li><a href="#Search">Search</a></li>
+        <li><a href="#download">Download from Kemono and Coomer</a></li>
+        <li><a href="#update">Update</a></li>
+        <li><a href="#search">Search</a></li>
       </ul>
     <li><a href="#roadmap">Roadmap</a></li>
   </ol>
