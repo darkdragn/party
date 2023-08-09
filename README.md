@@ -114,10 +114,10 @@ You can either clone the repo or install from Releases.
         <service>: Ex. patreon, fantia, onlyfans
         <creator>: username or id of the user
 
-        -l --limit INTEGER				Number of posts to parse, from newest to oldest.
+        -l --limit INTEGER			Number of posts to parse, from newest to oldest.
         -e --exclude-extension TEXT		Don't download files with extenstion TEXT. Can be given multiple times.
-        -w --workers INTEGER			Number of concurrent downloads.
-        --name TEXT						Skip user db pull/search.
+        -w --workers INTEGER		Number of concurrent downloads.
+        --name TEXT				Skip user db pull/search.
         -d, --directory TEXT    		Specify an output directory.
 
 Examples
