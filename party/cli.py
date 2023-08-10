@@ -25,53 +25,59 @@ from .user import User
 
 APP = typer.Typer(no_args_is_help=True)
 
+# Define Common args and options for commands 
 
-@APP.command(name="kemono", no_args_is_help=True)
+service_arg = typer.Argument(
+    help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
+)
+
+userid_arg = typer.Argument(
+    help="User id from the url or name from search"
+)
+
+limit_option = typer.Option(
+    "-l",
+    "--limit",
+    help="Number of posts to parse. Starts from newest to oldest.",
+)
+
+extension_option = typer.Option(
+    "-e",
+    "--exclude-extension",
+    help="File extension to exclude"
+)
+
+worker_option = typer.Option(
+    "-w",
+    "--workers",
+    help="Number of open download connections"
+)
+
+name_option = typer.Option(
+    help= "If you provided an id in the argument, you can provide a name here" +
+    " to skip user db pull/search."
+)
+
+dir_option = typer.Option(
+    "-d",
+    "--directory",
+    help="Specify an output directory"
+)
+
 def pull_user(
-    service: Annotated[
-        str,
-        typer.Argument(
-            help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
-        ),
-    ],
-    user_id: Annotated[
-        str, typer.Argument(help="User id from the url or name from search")
-    ],
-    base_url: Annotated[
-        str,
-        typer.Option(
-            help="Base for the site. Default is kemono.party but you can set it to https://coomer.party",
-        ),
-    ] = "https://kemono.party",
-    files: bool = True,
-    exclude_external: bool = True,
-    limit: Annotated[
-        int,
-        typer.Option(
-            "-l",
-            "--limit",
-            help="Number of posts to parse. Starts from newest to oldest.",
-        ),
-    ] = None,
-    post_id: bool = None,
-    ignore_extensions: list[str] = typer.Option(
-        [], "-i", "--ignore-extensions", help="File extensions to ignore"
-    ),
-    workers: int = typer.Option(
-        4, "-w", "--workers", help="Number of open download connections"
-    ),
-    name: Annotated[
-        str,
-        typer.Option(
-            help="If you provided an id in the argument, you can provide a name here to skip user db pull/search",
-        ),
-    ] = None,
-    directory: Annotated[
-        str, typer.Option("-d", "--directory", help="Specify an output directory")
-    ] = None,
+    service: str, 
+    user_id: str,
+    base_url: str, 
+    files: bool,
+    exclude_external: bool,
+    limit: int, 
+    post_id: bool,
+    exclude_extensions: list[str], 
+    workers: int,
+    name: str,
+    directory: str 
 ):
-    """Quick download command for kemono.party"""
-    logger.debug(f"Ignored Extensions: {ignore_extensions}")
+    logger.debug(f"Excluded Extensions: {exclude_extensions}")
     if name:
         user = User(user_id, name, service, site=base_url)
     else:
@@ -88,7 +94,7 @@ def pull_user(
     if not os.path.exists(directory):
         os.mkdir(directory)
     options = dict(
-        ignore_extensions=ignore_extensions,
+        exclude_extensions=exclude_extensions,
         files=files,
         exclude_external=exclude_external,
         base_url=base_url,
@@ -99,10 +105,9 @@ def pull_user(
         posts = list(user.limit_posts(limit))
         embedded = [embed for p in user.posts if (embed := p.embed)]
         files = [f for p in posts for f in p.get_files(files)]
-        if ignore_extensions:
-            filter_ = lambda x: not any(
-                x["name"].endswith(i) for i in ignore_extensions
-            )
+        if exclude_extensions:
+            filter_ = lambda x: not any(x["name"].endswith(i)
+                                        for i in exclude_extensions)
             files = list(filter(filter_, files))
         if post_id is None:
             fn_set = {i.name for i in files}
@@ -132,13 +137,15 @@ def pull_user(
             f"Embedded objects found; saving to {embed_filename}",
             fg=typer.colors.BRIGHT_MAGENTA,
         )
-        with open(f"{directory}/.embedded", "w", encoding="utf-8") as embed_file:
+        with open(f"{directory}/.embedded", "w",
+                  encoding="utf-8") as embed_file:
             json.dump(embedded, embed_file)
     with open(f"{directory}/.posts", "w", encoding="utf-8") as posts_file:
         json.dump(posts, posts_file, for_json=True)
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
-        output = asyncio.run(download_async(pbar, base_url, directory, files, workers))
+        output = asyncio.run(
+            download_async(pbar, base_url, directory, files, workers))
     count = Counter(output)
     logger.info(f"Output status: {count}")
 
@@ -150,89 +157,112 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
 
     token = generate_token()
     async with aiohttp.ClientSession(
-        base_url,
-        timeout=timeout,
-        headers={
-            "Accept-Encoding": "gzip, deflate, br",
-            "Cache-Control": "no-cache",
-            "pragma": "no-cache",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
-            "Safari/537.36",
-        },
-        cookies={"__ddg2": token},
-        # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
-        connector=conn,
+            base_url,
+            timeout=timeout,
+            headers={
+                "Accept-Encoding":
+                "gzip, deflate, br",
+                "Cache-Control":
+                "no-cache",
+                "pragma":
+                "no-cache",
+                "User-Agent":
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
+                "Safari/537.36",
+            },
+            cookies={"__ddg2": token},
+    # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
+            connector=conn,
     ) as session:
-        semaphore = asyncio.Semaphore(workers)
+        output = []
+        while len(files) != 0:
+            semaphore = asyncio.Semaphore(workers)
+            cworkers = workers
 
-        async def download(file):
-            filename = f"{directory}/{file.filename}"
-            if os.path.exists(filename):
-                pbar.update(1)
-                return StatusEnum.EXISTS
-            async with semaphore:
-                status = await file.download(session, filename)
-            pbar.update(1)
-            return status
+            async def download(file):
+                nonlocal cworkers
+                filename = f"{directory}/{file.filename}"
+                if os.path.exists(filename):
+                    pbar.update(1)
+                    return StatusEnum.EXISTS
+                async with semaphore:
+                    status = await file.download(session, filename)
+                    if status == StatusEnum.ERROR_429 and cworkers > 1:
+                        cworkers -= 1
+                        await semaphore.acquire() #decrement workers
+                if status == StatusEnum.ERROR_429:
+                    status = file
+                else:
+                    pbar.update(1)
+                return status
 
-        downloads = [download(f) for f in files]
-        return await asyncio.gather(*downloads)
-
+            downloads = [download(f) for f in files]
+            temp = await asyncio.gather(*downloads)
+            files.clear()
+            for stat in temp:
+                if stat != StatusEnum.SUCCESS and stat != StatusEnum.EXISTS:
+                    files.append(stat) #need to handle other errors here
+                else:
+                    output.append(stat)
+            if workers > 1:
+                workers -= 1
+        return output
 
 @APP.command()
-def onlyfans(
-    user_id: str,
+def kemono(
+    service: Annotated[str, service_arg],
+    user_id: Annotated[str, userid_arg],
     files: bool = True,
-    limit: int = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    post_id: bool = False,
-    workers: int = typer.Option(10, "-w"),
-    name: str = None,
-    directory: Annotated[str, typer.Option(help="Specify an output directory")] = None,
+    exclude_external: bool = True,
+    limit: Annotated[int, limit_option] = None,
+    post_id: bool = None,
+    exclude_extensions: Annotated[list[str], extension_option] = [],
+    workers: Annotated[int, worker_option] = 4,
+    name: Annotated[str, name_option ] = None, 
+    directory: Annotated[str, dir_option] = None
 ):
-    """Convenience command for running against coomer, Onlyfans"""
-    base = "https://coomer.party"
-    service = "onlyfans"
+
+    """Quick download command for kemono.party"""
+    base = "https://kemono.party"
     pull_user(
         service,
         user_id,
         base,
         files=files,
+        exclude_external=exclude_external,
         limit=limit,
         post_id=post_id,
-        ignore_extensions=ignore_extensions,
+        exclude_extensions=exclude_extensions,
         workers=workers,
         name=name,
         directory=directory,
     )
 
-
 @APP.command()
 def coomer(
-    service: str,
-    user_id: str,
+    service: Annotated[str, service_arg],
+    user_id: Annotated[str, userid_arg],
     files: bool = True,
-    limit: int = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    post_id: bool = False,
-    workers: int = typer.Option(2, "-w"),
-    name: str = None,
-    directory: Annotated[
-        str, typer.Option("-d", "--directory", help="Specify an output directory")
-    ] = None,
+    exclude_external: bool = True,
+    limit: Annotated[int, limit_option] = None,
+    post_id: bool = None,
+    exclude_extensions: Annotated[list[str], extension_option] = [],
+    workers: Annotated[int, worker_option] = 4,
+    name: Annotated[str, name_option ] = None, 
+    directory: Annotated[str, dir_option] = None
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = "https://coomer.party"
-    # service = "onlyfans"
     pull_user(
         service,
         user_id,
         base,
         files=files,
+        exclude_external=exclude_external,
         limit=limit,
         post_id=post_id,
-        ignore_extensions=ignore_extensions,
+        exclude_extensions=exclude_extensions,
         workers=workers,
         name=name,
         directory=directory,
@@ -241,27 +271,39 @@ def coomer(
 
 @APP.command(no_args_is_help=True)
 def search(
-    search_str: str,
-    site: str = None,
-    service: str = None,
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
-    interactive: bool = typer.Option(False, "-i", "--interactive"),
+        search_str: Annotated[
+            str,
+            typer.Argument(help="used to filter users against name.lower()")
+        ],
+        site: Annotated[
+            str,
+            typer.Argument(help="kemono or coomer")
+        ],
+        service: Annotated[
+            str, 
+            typer.Option(
+                "--service",
+                help="service name to filter users against [patreon,fantia,fanbox,etc...]"
+            )
+        ] = None,
+        exclude_external: bool = True,
+        limit: Annotated[int, limit_option] = None,
+        exclude_extensions: Annotated[list[str], extension_option] = [],
+        interactive: bool = typer.Option(False, "-i", "--interactive"),
+        workers: Annotated[int, worker_option] = 4,
+        directory: Annotated[str, dir_option] = None
 ):
-    """Search function
-    Args:
-        search_str: used to filter users against name.lower()
-        site: default to kemono, if string 'coomer' user the coomer url
-        service: service name to filter users against [patreon,fantia,fanbox,etc...]
-    """
-    base_url = "https://kemono.party"
-    if site == "coomer":
+    """Search function"""
+    if site == "kemono":
+        base_url = "https://kemono.party"
+    elif site == "coomer":
         base_url = "https://coomer.party"
+    else:
+        logger.info(f"Invalid site: {site}. Use 'kemono' or 'coomer'.")
+        return 
     users = User.generate_users(base_url)
-    check = (
-        (lambda x: x.service == service and search_str in x.name.lower())
-        if service
-        else (lambda x: search_str in x.name.lower())
-    )
+    check = ((lambda x: x.service == service and search_str in x.name.lower())
+             if service else (lambda x: search_str in x.name.lower()))
     results = [i for i in users if check(i)]
     table = PrettyTable()
     table.field_names = ["Index", "Name", "ID", "Service"]
@@ -272,24 +314,28 @@ def search(
         selection = typer.prompt("Index selection: ", type=int)
         user = results[selection]
         typer.secho(
-            f"Downloading {user.name} using default options...",
+            f"Downloading {user.name} using specified options...",
             fg=typer.colors.BRIGHT_GREEN,
         )
         pull_user(
-            user.service,
+            user.service, 
             user.id,
+            base_url, 
+            files=True,
+            exclude_external=exclude_external,
+            limit=limit,
+            post_id=True,
+            exclude_extensions=exclude_extensions,
+            workers=workers,
             name=user.name,
-            base_url=base_url,
-            workers=8,
-            ignore_extensions=ignore_extensions,
+            directory=directory
         )
-
 
 @APP.command()
 def custom_parse(
     service: str,
     user_id: str,
-    search: str,  # pylint: disable=redefined-outer-name
+    search: str,    # pylint: disable=redefined-outer-name
     limit: int = None,
 ):
     """Uses provided regex to pull links from the content key on posts"""
@@ -303,15 +349,22 @@ def custom_parse(
 
 
 @APP.command()
-def update(folder: str, limit: int = None):
+def update(
+        folder: str,
+        limit: Annotated[int, limit_option] = None,
+        workers: Annotated[int, worker_option] = 4,
+):
     """Update an existing pull from a party site"""
     with open(f"{folder}/.info", encoding="utf-8") as info:
         settings = json.load(info)
+    # make backwards compatible with old option "--ignore-extensions"
+    if "ignore_extensions" in settings["options"]:
+        settings["options"]["exclude_extensions"] = settings["options"].pop("ignore_extensions")
     pull_user(
         settings["user"]["service"],
         settings["user"]["id"],
         name=settings["user"]["name"],
-        workers=4,
+        workers=workers,
         limit=limit,
         **settings["options"],
     )
@@ -319,10 +372,10 @@ def update(folder: str, limit: int = None):
 
 @APP.command()
 def details(
-    service: str,
-    user_id: str,
-    base_url: str = "https://kemono.party",
-    ignore_extensions: list[str] = typer.Option(None, "-i"),
+        service: str,
+        user_id: str,
+        base_url: str = "https://kemono.party",
+        exclude_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Show user details: (post#,attachment#,files#)"""
 
@@ -333,12 +386,14 @@ def details(
         posts = user.posts
         attachments = [a for p in posts for a in p.attachments]
         files = [p.file for p in posts if p.file]
-        if ignore_extensions:
-            filter_ = lambda x: not any(x.name.endswith(i) for i in ignore_extensions)
+        if exclude_extensions:
+            filter_ = lambda x: not any(
+                x.name.endswith(i) for i in exclude_extensions)
             attachments = list(filter(filter_, attachments))
             files = list(filter(filter_, files))
         spin.ok("✔")
-    logger.info(dict(posts=len(posts), attachments=len(attachments), files=len(files)))
+    logger.info(
+        dict(posts=len(posts), attachments=len(attachments), files=len(files)))
 
 
 @APP.command()
@@ -358,13 +413,15 @@ def embedded_links(
 
 
 @APP.callback()
-def configure(verbose: bool = False):
+def configure(
+    verbose: bool = False,
+):
     """A quick cli for downloading from party-chan sites"""
+
     if verbose:
         return
     logger.remove()
     logger.add(sys.stderr, level="DEBUG")
-
 
 if __name__ == "__main__":
     APP()

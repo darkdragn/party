@@ -17,18 +17,20 @@
   <ol>
     <li>
       <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
     </li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">I nstallation</a></li>
+        <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
+      <ul>
+        <li><a href="#download">Download from Kemono and Coomer</a></li>
+        <li><a href="#update">Update</a></li>
+        <li><a href="#search">Search</a></li>
+      </ul>
     <li><a href="#roadmap">Roadmap</a></li>
   </ol>
 </details>
@@ -94,39 +96,64 @@ You can either clone the repo or install from Releases.
 
 <!-- USAGE EXAMPLES -->
 ## Usage
+  Party has 4 basic commands
+
+ > party \<command>
+
+ ```sh
+  kemono: Download from kemono
+  coomer: Download from coomer
+  update: Checks for and downloads new posts
+  search: Find creators based on username or id
+  ```
+  
+### Download
+***Kemono and Coomer***
+
+  A basic breakdown of the options
+  > party \<site> \<service> \<creator> [options]
+
+        <site>: Kemono or Coomer
+        <service>: Ex. patreon, fantia, onlyfans
+        <creator>: username or id of the user
+
+        -l --limit INTEGER			Number of posts to parse, from newest to oldest.
+        -e --exclude-extension TEXT		Don't download files with extenstion TEXT. Can be given multiple times.
+        -w --workers INTEGER		Number of concurrent downloads.
+        --name TEXT				Skip user db pull/search.
+        -d, --directory TEXT    		Specify an output directory.
+
+Examples
 
 - Download something from kemono
   ```sh
   party kemono patreon diives
   ```
 
-  A basic breakdown of the options
-  > party kemono \<service> \<creator> [options]
-
-        service: Ex. patreon, fantia, onlyfans
-        user_id: either name or id of the user
-        base_url: Swapable for coomer.party
-        files: add post['file'] to downloads
-        exclude_external: filter out files not hosted on *.party
-        limit: limit the number of posts we pull from
-        ignore_extensions: drop files with these extensions
-        workers: number of open connections allowed
-        name: skip downloading the user db, generate user with name, service, user_id
-
 - Download something from coomer
   ```sh
-  # party coomer <service> <creator> [options] // only service used to be onlyfans, but now fansly is supported
   party coomer onlyfans belledelphine
-
-  # Second example for fansly
-  party coomer fansly forgottenlovechild
   ```
+
+- Download from coomer, exclude pictures, and limit to 2 downloads
+  ```sh
+  party coomer fansly forgottenlovechild -e jpg -e jpeg -e png -w 2
+  ```
+
+Party will check for existing files while downloading, so incomplete archives can be completed with kemono/coomer or with update. 
+
+### Update
 
 - Update an existing directory
   ```sh
-  # Note: This will skip creator list download, since we have that data
   party update diives
   ```
+  - This will skip creator list download, since we have that data.
+  - If the creator was initially downloaded with extensions excluded (option -e), update will retain those exclusions.
+
+### Search
+
+Search supports all options kemono and coomer take, e.g. -e, -w, -d, -l
 
 - Search for a user
   ```sh
@@ -135,7 +162,7 @@ You can either clone the repo or install from Releases.
 
 - Search for a user and select results interactively
   ```sh
-  party search belk -i  
+  party search belk -i
   +-------+------------------+--------------------+---------+
   | Index |       Name       |         ID         | Service |
   +-------+------------------+--------------------+---------+
@@ -152,7 +179,7 @@ You can either clone the repo or install from Releases.
 
 - A more specific search
   ```sh
-  party search --site coomer --service fansly forgotten
+  party search --site coomer --service fansly forgotten -w 3 -e jpg
   +-------+--------------------+--------------------+---------+
   | Index |        Name        |         ID         | Service |
   +-------+--------------------+--------------------+---------+

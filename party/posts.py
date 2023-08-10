@@ -103,10 +103,10 @@ class Attachment:
                         fbar.close()
                         status = StatusEnum.ERROR_OSERROR
                 else:
-                    logger.debug(
-                        dict(status=resp.status, filename=filename,
-                            url=resp.url, headers=resp.headers)
-                    )
+                    #logger.debug(
+                    #    dict(status=resp.status, filename=filename,
+                    #        url=resp.url, headers=resp.headers)
+                    #)
                     status = StatusEnum.ERROR_429
         except aiohttp.client_exceptions.TooManyRedirects as err:
             logger.debug(dict(error=err, filename=filename, url=self.path))
