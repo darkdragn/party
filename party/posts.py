@@ -163,5 +163,5 @@ class Post:
 
 
 PostSchema = desert.schema_class(
-    Post, meta=dict(datetimeformat="%a, %d %b %Y %H:%M:%S GMT", unknown=EXCLUDE)
+    Post, meta=dict(unknown=EXCLUDE)
 )

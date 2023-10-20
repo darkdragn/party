@@ -44,7 +44,7 @@ class User:
     @staticmethod
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
-        resp = requests.get(f"{base_url}/api/creators")
+        resp = requests.get(f"{base_url}/api/v1/creators.txt")
         return UserSchema(context=dict(site=base_url)).loads(resp.text, many=True)
 
     @classmethod
@@ -79,6 +79,8 @@ class User:
         schema = PostSchema()
         offset = 0
         while True:
+            if offset != 0 and offset % 50 != 0:
+                break
             resp = requests.get(self.url, params=dict(o=offset, limit=50))
             try:
                 posts = resp.json()
@@ -135,7 +137,7 @@ class User:
     @property
     def url(self) -> str:
         """URL builder for self"""
-        return f"{self.site}/api/{self.service}/user/{self.id}"
+        return f"{self.site}/api/v1/{self.service}/user/{self.id}"
 
 
 class UserSchema(Schema):
