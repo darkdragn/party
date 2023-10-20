@@ -41,6 +41,13 @@ limit_option = typer.Option(
     help="Number of posts to parse. Starts from newest to oldest.",
 )
 
+site_option = typer.Option(
+    "-s",
+    "--site",
+    help="Specify a site to use;" +
+    " Ex(kemono.party,coomer.party,kemono.su,coomer.su)"
+)
+
 extension_option = typer.Option(
     "-e",
     "--exclude-extension",
@@ -213,6 +220,7 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
 def kemono(
     service: Annotated[str, service_arg],
     user_id: Annotated[str, userid_arg],
+    site: str = "https://kemono.party",
     files: bool = True,
     exclude_external: bool = True,
     limit: Annotated[int, limit_option] = None,
@@ -224,7 +232,7 @@ def kemono(
 ):
 
     """Quick download command for kemono.party"""
-    base = "https://kemono.party"
+    base = site
     pull_user(
         service,
         user_id,
@@ -243,6 +251,7 @@ def kemono(
 def coomer(
     service: Annotated[str, service_arg],
     user_id: Annotated[str, userid_arg],
+    site: str = "https://coomer.party",
     files: bool = True,
     exclude_external: bool = True,
     limit: Annotated[int, limit_option] = None,
@@ -253,7 +262,7 @@ def coomer(
     directory: Annotated[str, dir_option] = None
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
-    base = "https://coomer.party"
+    base = site
     pull_user(
         service,
         user_id,
@@ -296,8 +305,12 @@ def search(
     """Search function"""
     if site == "kemono":
         base_url = "https://kemono.party"
+    elif site == "kemono.su":
+        base_url = "https://kemono.su"
     elif site == "coomer":
         base_url = "https://coomer.party"
+    elif site == "coomer.su":
+        base_url = "https://coomer.su"
     else:
         logger.info(f"Invalid site: {site}. Use 'kemono' or 'coomer'.")
         return 
@@ -336,10 +349,13 @@ def custom_parse(
     service: str,
     user_id: str,
     search: str,    # pylint: disable=redefined-outer-name
+    site: str = "https://kemono.party",
     limit: int = None,
 ):
     """Uses provided regex to pull links from the content key on posts"""
-    user = User.get_user("https://kemono.party", service, user_id)
+
+    base_url = site
+    user = User.get_user(base_url, service, user_id)
     if not os.path.exists(user.name):
         os.mkdir(user.name)
     logger.info(f"Downloading {user.name}")
@@ -374,11 +390,12 @@ def update(
 def details(
         service: str,
         user_id: str,
-        base_url: str = "https://kemono.party",
+        site: str = "https://kemono.party",
         exclude_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Show user details: (post#,attachment#,files#)"""
-
+    base_url = site
+    
     with yaspin(text="Pulling user DB") as spin:
         user = User.get_user(base_url, service, user_id)
         spin.ok("✔")
@@ -400,10 +417,11 @@ def details(
 def embedded_links(
     service: str,
     user_id: str,
-    base_url: str = "https://kemono.party",
+    site: str = "https://kemono.party",
 ):
     """Show user details: (post#,attachment#,files#)"""
-
+    base_url = site
+    
     with yaspin(text="Pulling user DB") as spin:
         user = User.get_user(base_url, service, user_id)
         spin.ok("✔")
