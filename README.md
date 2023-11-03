@@ -112,8 +112,8 @@ You can either clone the repo or install from Releases.
 
   A basic breakdown of the options
 
-
-  > Usage: party kemono [OPTIONS] SERVICE USER_ID
+  ```sh
+  Usage: party kemono [OPTIONS] SERVICE USER_ID
       Quick download command for kemono.party
     Arguments:
       SERVICE  Specify the service to pull from; Ex(patreon,fanbox,onlyfans)
@@ -156,6 +156,7 @@ You can either clone the repo or install from Releases.
                                       the post while keeping the original filename
                                       and extension  [default: {ref.filename}]
       --help                          Show this message and exit.
+```
 
 Examples
 
