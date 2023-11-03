@@ -44,7 +44,7 @@ class User:
     @staticmethod
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
-        resp = requests.get(f"{base_url}/api/creators")
+        resp = requests.get(f"{base_url}/api/v1/creators")
         return UserSchema(context=dict(site=base_url)).loads(resp.text, many=True)
 
     @classmethod
@@ -82,6 +82,8 @@ class User:
             resp = requests.get(self.url, params=dict(o=offset, limit=50))
             try:
                 posts = resp.json()
+                with open('test.json', 'w') as f:
+                    f.write(resp.text)
             except requests.exceptions.JSONDecodeError as e:
                 print(resp.request.url)
                 print(resp.request.url)
@@ -92,7 +94,7 @@ class User:
                     yield post
                 else:
                     yield schema.load(post)
-            if len(posts) == 0:
+            if len(posts) <= 50:
                 break
 
     def for_json(self):
@@ -135,7 +137,7 @@ class User:
     @property
     def url(self) -> str:
         """URL builder for self"""
-        return f"{self.site}/api/{self.service}/user/{self.id}"
+        return f"{self.site}/api/v1/{self.service}/user/{self.id}"
 
 
 class UserSchema(Schema):

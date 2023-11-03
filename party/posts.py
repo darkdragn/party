@@ -123,12 +123,12 @@ AttachmentSchema = desert.schema_class(Attachment, meta=dict(unknown=EXCLUDE))
 class Post:
     """Post Schema/dataclass"""
 
-    added: datetime
+    added: str
     content: str
     edited: Optional[datetime]
     # str necessary since some coomer returns string for id
     id: str 
-    published: Optional[datetime]
+    published: Optional[str]
     service: str
     shared_file: bool
     title: str
