@@ -122,6 +122,14 @@ def pull_user(
         except ConnectTimeoutError:
             typer.secho("Connection error occured", fg=typer.colors.BRIGHT_RED)
             typer.Exit(3)
+        except StopIteration:
+            typer.secho("User not found.", fg=typer.colors.BRIGHT_RED)
+            typer.secho(
+                f"You attempted the pull with {service}, "
+                "maybe try a different service or search?",
+                fg=typer.colors.BRIGHT_RED
+            )
+            sys.exit(3)
     if not directory:
         directory = user.name
     user.directory = directory
@@ -171,7 +179,7 @@ def pull_user(
                     new_files[ref.filename] = ref
             return list(new_files.values())
         if ordered_short:
-            files = format_filenames(files, file_format, ["jpg", "png"])
+            files = format_filenames(files, file_format, ["jpg", "png", "jpeg"])
         else:
             files = format_filenames(files, file_format)
         if exclude_external:
