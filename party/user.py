@@ -91,6 +91,8 @@ class User:
             resp = requests.get(self.url, params=dict(o=offset, limit=50))
             try:
                 posts = resp.json()
+                with open('test.json', 'w') as f:
+                    f.write(resp.text)
             except requests.exceptions.JSONDecodeError as e:
                 print(resp.request.url)
                 print(resp.request.url)
@@ -101,7 +103,7 @@ class User:
                     yield post
                 else:
                     yield schema.load(post)
-            if len(posts) == 0:
+            if len(posts) <= 50:
                 break
 
     def for_json(self):
