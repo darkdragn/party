@@ -29,6 +29,7 @@ prettytable = "^3.0.0"
 simplejson = "^3.17.6"
 yaspin = "^2.1.0"
 desert = "^2020.11.18"
+urllib3 = "<=2.0.0"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"
