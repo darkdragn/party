@@ -103,8 +103,6 @@ class User:
                     yield post
                 else:
                     yield schema.load(post)
-            if len(posts) <= 50:
-                break
 
     def for_json(self):
         """JSON convert method for simplejson
