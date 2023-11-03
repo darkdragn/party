@@ -72,7 +72,7 @@ You can either clone the repo or install from Releases.
 
 1. Just do it, I guess. \shrugs (This is the latest link as of this post, check releases)
    ```sh
-   pip install https://github.com/darkdragn/party/releases/download/v0.4.4/party-0.4.4-py3-none-any.whl
+   pip install https://github.com/darkdragn/party/releases/download/v0.6.0/party-0.6.0-py3-none-any.whl
    ```
 
 #### Installation from source
@@ -111,17 +111,51 @@ You can either clone the repo or install from Releases.
 ***Kemono and Coomer***
 
   A basic breakdown of the options
-  > party \<site> \<service> \<creator> [options]
 
-        <site>: Kemono or Coomer
-        <service>: Ex. patreon, fantia, onlyfans
-        <creator>: username or id of the user
 
-        -l --limit INTEGER			Number of posts to parse, from newest to oldest.
-        -e --exclude-extension TEXT		Don't download files with extenstion TEXT. Can be given multiple times.
-        -w --workers INTEGER		Number of concurrent downloads.
-        --name TEXT				Skip user db pull/search.
-        -d, --directory TEXT    		Specify an output directory.
+  > Usage: party kemono [OPTIONS] SERVICE USER_ID
+      Quick download command for kemono.party
+    Arguments:
+      SERVICE  Specify the service to pull from; Ex(patreon,fanbox,onlyfans)
+               [required]
+      USER_ID  User id from the url or name from search  [required]
+    Options:
+      --site TEXT                     [default: https://kemono.party]
+      --files / --no-files            [default: files]
+      --exclude-external / --no-exclude-external
+                                      [default: exclude-external]
+      -l, --limit INTEGER             Number of posts to parse. Starts from newest
+                                      to oldest.
+      --post-id / --no-post-id        Sets file_format to
+                                      {ref.post_id}_{ref.filename}, mutually
+                                      exclusive with post_title, ordered short and
+                                      file_format
+      -e, --exclude-extension TEXT    File extension to exclude
+      -w, --workers INTEGER           Number of open download connections
+                                      [default: 4]
+      --name TEXT                     If you provided an id in the argument, you
+                                      can provide a name here to skip user db
+                                      pull/search.
+      -d, --directory TEXT            Specify an output directory
+      --post-title / --no-post-title  Sets file_format to
+                                      {ref.post_title}_{ref.filename}, mutually
+                                      exclusive with post_id, ordered_short and
+                                      file_format  [default: no-post-title]
+      --ordered-short / --no-ordered-short
+                                      Sets file_format to {ref.post_id}_{ref.index
+                                      :03}.{ref.extension}, mutually exclusive
+                                      with post_id, post_title and file_format
+                                      [default: no-ordered-short]
+      --file-format TEXT              Used to set the output file format. Mutually
+                                      exclusive with post_id, post_title and
+                                      ordered short. For custom options, see
+                                      post.py for schema fields. For example,
+                                      {ref.post_id}_{ref.index:03}_{ref.filename}
+                                      would accomplish combining post_id and
+                                      ordering the files based on appearance in
+                                      the post while keeping the original filename
+                                      and extension  [default: {ref.filename}]
+      --help                          Show this message and exit.
 
 Examples
 
