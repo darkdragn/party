@@ -291,7 +291,6 @@ def kemono(
         name=name,
         directory=directory,
         post_title=post_title,
-        ordered=ordered,
         ordered_short=ordered_short,
         file_format=file_format,
     )
@@ -328,7 +327,6 @@ def coomer(
         name=name,
         directory=directory,
         post_title=post_title,
-        ordered=ordered,
         ordered_short=ordered_short,
         file_format=file_format,
     )
