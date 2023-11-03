@@ -36,6 +36,7 @@ class Attachment:
     name: Optional[str]
     path: Optional[str]
     post_id: Optional[str]
+    post_title: Optional[str]
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
@@ -43,6 +44,22 @@ class Attachment:
             self.filename = self.name
         if self.filename and "/" in self.filename:
             self.filename = self.filename.split("/").pop()
+
+    @property
+    def base_name(self):
+        return self.name.split('.')[0]
+
+    @property
+    def extension(self):
+        if '.' not in self.name:
+            hold = self.path.split('/').pop()
+            self.filename = f"{self.name}_{hold}"
+        try:
+            return self.filename.split('.')[1]
+        except:
+            print(self)
+            print(self.name)
+            raise
 
     def __getitem__(self, name):
         """Temporary hold over for migration"""
@@ -127,7 +144,7 @@ class Post:
     content: str
     edited: Optional[datetime]
     # str necessary since some coomer returns string for id
-    id: str 
+    id: str
     published: Optional[str]
     service: str
     shared_file: bool
@@ -153,8 +170,10 @@ class Post:
         collection = list(self.attachments)
         if include_files:
             collection.append(self.file)
-        for post in filter(None, collection):
+        for index, post in enumerate(filter(None, collection)):
             post.post_id = self.id
+            post.post_title = self.title
+            post.index = index
             yield post
 
     def for_json(self):

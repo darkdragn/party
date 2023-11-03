@@ -7,7 +7,7 @@ import os
 import re
 import sys
 
-from typing import Counter
+from typing import Counter, Union
 from urllib3.exceptions import ConnectTimeoutError
 
 import aiohttp
@@ -71,18 +71,45 @@ dir_option = typer.Option(
     help="Specify an output directory"
 )
 
+post_id_option = typer.Option(
+    help="Sets file_format to {ref.post_id}_{ref.filename}, mutually "
+    "exclusive with post_title, ordered short and file_format"
+)
+
+post_title_option = typer.Option(
+    help="Sets file_format to {ref.post_title}_{ref.filename}, mutually "
+    "exclusive with post_id, ordered_short and file_format"
+)
+
+ordered_short_option = typer.Option(
+    help="Sets file_format to {ref.post_id}_{ref.index:03}.{ref.extension}, mutually "
+    "exclusive with post_id, post_title and file_format"
+)
+
+file_format_option = typer.Option(
+    help="Used to set the output file format. "
+    "Mutually exclusive with post_id, post_title and ordered short. "
+    "For custom options, see post.py for schema fields. "
+    "For example, {ref.post_id}_{ref.index:03}_{ref.filename} would accomplish "
+    "combining post_id and ordering the files based on appearance in the post "
+    "while keeping the original filename and extension"
+)
+
 def pull_user(
-    service: str, 
+    service: str,
     user_id: str,
-    base_url: str, 
+    base_url: str,
     files: bool,
     exclude_external: bool,
-    limit: int, 
+    limit: int,
     post_id: bool,
-    exclude_extensions: list[str], 
+    exclude_extensions: list[str],
     workers: int,
     name: str,
-    directory: str 
+    directory: str = None,
+    post_title: bool = False,
+    ordered_short: bool = False,
+    file_format: str = "{ref.filename}",
 ):
     logger.debug(f"Excluded Extensions: {exclude_extensions}")
     if name:
@@ -100,14 +127,22 @@ def pull_user(
     user.directory = directory
     if not os.path.exists(directory):
         os.mkdir(directory)
+    if post_id:
+        file_format = "{ref.post_id}_{ref.name}"
+    if post_title:
+        file_format = "{ref.post_title}_{ref.name}"
+    if ordered_short:
+        file_format = "{ref.post_id}_{ref.index:03}.{ref.extension}"
     options = dict(
         exclude_extensions=exclude_extensions,
         files=files,
         exclude_external=exclude_external,
         base_url=base_url,
-        post_id=post_id,
         directory=directory,
+        ordered_short=ordered_short,
+        file_format=file_format,
     )
+    user.write_info(options)
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = list(user.limit_posts(limit))
         embedded = [embed for p in user.posts if (embed := p.embed)]
@@ -120,18 +155,25 @@ def pull_user(
             fn_set = {i.name for i in files}
             if len(files) > len(fn_set):
                 typer.secho(
-                    "Duplicate files found, updating post_id bool",
+                    "Duplicate files found, recommend using post_id",
                     fg=typer.colors.BRIGHT_RED,
                 )
-                post_id = True
-        user.write_info(options)
-        if post_id:
+        def format_filenames(files, format_, permitted=None):
             new_files = {}
             for ref in files:
-                ref.filename = f"{ref.post_id}_{ref.name}"
-                if ref.name not in new_files:
-                    new_files[ref.name] = ref
-            files = list(new_files.values())
+                if permitted:
+                    ref.filename = ref.name
+                    if ref.extension in permitted:
+                        ref.filename = format_.format(ref=ref)
+                else:
+                    ref.filename = format_.format(ref=ref)
+                if ref.filename not in new_files:
+                    new_files[ref.filename] = ref
+            return list(new_files.values())
+        if ordered_short:
+            files = format_filenames(files, file_format, ["jpg", "png"])
+        else:
+            files = format_filenames(files, file_format)
         if exclude_external:
             files = [i for i in files if "//" not in i.name]
         else:
@@ -224,11 +266,14 @@ def kemono(
     files: bool = True,
     exclude_external: bool = True,
     limit: Annotated[int, limit_option] = None,
-    post_id: bool = None,
+    post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
     workers: Annotated[int, worker_option] = 4,
-    name: Annotated[str, name_option ] = None, 
-    directory: Annotated[str, dir_option] = None
+    name: Annotated[str, name_option ] = None,
+    directory: Annotated[str, dir_option] = None,
+    post_title: Annotated[bool, post_title_option] = False,
+    ordered_short: Annotated[bool, ordered_short_option] = False,
+    file_format: Annotated[str, file_format_option] = "{ref.filename}",
 ):
 
     """Quick download command for kemono.party"""
@@ -245,6 +290,10 @@ def kemono(
         workers=workers,
         name=name,
         directory=directory,
+        post_title=post_title,
+        ordered=ordered,
+        ordered_short=ordered_short,
+        file_format=file_format,
     )
 
 @APP.command()
@@ -255,11 +304,14 @@ def coomer(
     files: bool = True,
     exclude_external: bool = True,
     limit: Annotated[int, limit_option] = None,
-    post_id: bool = None,
+    post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
     workers: Annotated[int, worker_option] = 4,
     name: Annotated[str, name_option ] = None, 
-    directory: Annotated[str, dir_option] = None
+    directory: Annotated[str, dir_option] = None,
+    post_title: Annotated[bool, post_title_option] = False,
+    ordered_short: Annotated[bool, ordered_short_option] = False,
+    file_format: Annotated[str, file_format_option] = "{ref.filename}",
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = site
@@ -275,6 +327,10 @@ def coomer(
         workers=workers,
         name=name,
         directory=directory,
+        post_title=post_title,
+        ordered=ordered,
+        ordered_short=ordered_short,
+        file_format=file_format,
     )
 
 
