@@ -7,7 +7,7 @@ from functools import cached_property
 from itertools import islice
 
 from numbers import Number
-from typing import Iterator, List, Optional
+from typing import Generator, Iterator, List, Optional
 
 # from urllib3.exceptions import ConnectTimeoutError
 
@@ -44,8 +44,19 @@ class User:
     @staticmethod
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
-        resp = requests.get(f"{base_url}/api/v1/creators")
+        resp = requests.get(f"{base_url}/api/v1/creators.txt")
         return UserSchema(context=dict(site=base_url)).loads(resp.text, many=True)
+
+    @staticmethod
+    def return_user(users, service: str, search: str, attr: str):
+        try:
+            return next(
+                (i for i in users if i.service == service and getattr(i, attr) == search)
+            )
+        except StopIteration:
+            return next(
+                (i for i in users if i.service == service and getattr(i, attr).lower() == search.lower())
+            )
 
     @classmethod
     def get_user(cls, base_url: str, service: str, search: str):
@@ -61,14 +72,10 @@ class User:
         users = cls.generate_users(base_url)
         try:
             attr = "id"
-            return next(
-                (i for i in users if i.service == service and getattr(i, attr) == search)
-            )
+            return cls.return_user(users, service, search, attr)
         except StopIteration:
             attr = "name"
-            return next(
-                (i for i in users if i.service == service and getattr(i, attr) == search)
-            )
+            return cls.return_user(users, service, search, attr) 
 
     def generate_posts(self, raw: bool = False) -> Iterator[Post]:
         """Generator for Posts from this user
@@ -79,6 +86,8 @@ class User:
         schema = PostSchema()
         offset = 0
         while True:
+            if offset != 0 and offset % 50 != 0:
+                break
             resp = requests.get(self.url, params=dict(o=offset, limit=50))
             try:
                 posts = resp.json()

@@ -8,3 +8,5 @@ downloads
 **/*.gif
 **/*.mp4
 **/*.pyc
+*.whl
+*.gz
