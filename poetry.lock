@@ -1551,13 +1551,13 @@ multidict = ">=4.0"
 
 [[package]]
 name = "yaspin"
-version = "2.5.0"
+version = "3.0.1"
 description = "Yet Another Terminal Spinner"
 optional = false
-python-versions = ">=3.8.1,<4.0.0"
+python-versions = ">=3.9,<4.0"
 files = [
-    {file = "yaspin-2.5.0-py3-none-any.whl", hash = "sha256:58aaa19330b9eacf86241043342b4040ded75f170240276d963c570263cd8f53"},
-    {file = "yaspin-2.5.0.tar.gz", hash = "sha256:f96ab3b5c42e1eaa6af3193508082309d9dc43f6963339f9aa606003ee8d7e63"},
+    {file = "yaspin-3.0.1-py3-none-any.whl", hash = "sha256:c4b5d2ca23ae664b87a5cd53401c5107cef12668a71d9ee5ea5536045f364121"},
+    {file = "yaspin-3.0.1.tar.gz", hash = "sha256:9c04aa69cce9be83e1ea3134a6712e749e6c0c9cd02599023713e6befd7bf369"},
 ]
 
 [package.dependencies]
@@ -1566,4 +1566,4 @@ termcolor = ">=2.3,<3.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "58ad088c13004cda3cf5bfdd6b36c2ea31a1e195db884abe06c50397af872d08"
+content-hash = "a2e1c77aa06533b03b346fd2b0f39f9bc723ee54174ab34d77246aad2ffb49f7"

@@ -27,7 +27,7 @@ aiohttp = "^3.8.1"
 aiofiles = "^0.8.0"
 prettytable = "^3.0.0"
 simplejson = "^3.17.6"
-yaspin = "^2.1.0"
+yaspin = "^3.0.0"
 desert = "^2020.11.18"
 urllib3 = "<=2.0.0"
 
