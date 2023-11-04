@@ -117,7 +117,9 @@ class User:
         Yields:
             Post
         """
-        return islice(self.generate_posts(), limit)
+        gen = self.generate_posts()
+        return [next(gen, None) for _ in range(limit)]
+
 
     def write_info(self, options: Optional[dict] = None) -> None:
         """Write out user details for pull options
