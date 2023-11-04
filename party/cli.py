@@ -149,10 +149,10 @@ def pull_user(
     )
     user.write_info(options)
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
-        posts = list(user.limit_posts(limit))
-        embedded = [
-            embed for p in user.limit_posts(limit) if (embed := p.embed)
-        ]
+        posts = list(
+            user.limit_posts(limit) if limit else user.generate_posts()
+        )
+        embedded = [embed for p in posts if (embed := p.embed)]
         files = [f for p in posts for f in p.get_files(files)]
         if exclude_extensions:
             filter_ = lambda x: not any(

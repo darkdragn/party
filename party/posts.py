@@ -100,7 +100,7 @@ class Attachment:
                     try:
                         async with aiofiles.open(filename, "wb") as output:
                             async for data in resp.content.iter_chunked(
-                                2**16
+                                3**16
                             ):
                                 await output.write(data)
                                 fbar.update(len(data))
