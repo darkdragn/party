@@ -91,10 +91,7 @@ class User:
             resp = requests.get(self.url, params=dict(o=offset, limit=50))
             try:
                 posts = resp.json()
-                with open('test.json', 'w') as f:
-                    f.write(resp.text)
             except requests.exceptions.JSONDecodeError as e:
-                print(resp.request.url)
                 print(resp.request.url)
                 raise e
             for post in posts:

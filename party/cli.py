@@ -23,6 +23,10 @@ from yaspin import yaspin
 from .common import generate_token, StatusEnum
 from .user import User
 
+if sys.platform == 'win32':
+    sys.stdin.reconfigure(encoding='utf-8')
+    sys.stdout.reconfigure(encoding='utf-8')
+
 APP = typer.Typer(no_args_is_help=True)
 
 # Define Common args and options for commands 
