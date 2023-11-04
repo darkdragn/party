@@ -23,21 +23,19 @@ from yaspin import yaspin
 from .common import generate_token, StatusEnum
 from .user import User
 
-if sys.platform == 'win32':
-    sys.stdin.reconfigure(encoding='utf-8')
-    sys.stdout.reconfigure(encoding='utf-8')
+if sys.platform == "win32":
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
 
 APP = typer.Typer(no_args_is_help=True)
 
-# Define Common args and options for commands 
+# Define Common args and options for commands
 
 service_arg = typer.Argument(
     help="Specify the service to pull from; Ex(patreon,fanbox,onlyfans)"
 )
 
-userid_arg = typer.Argument(
-    help="User id from the url or name from search"
-)
+userid_arg = typer.Argument(help="User id from the url or name from search")
 
 limit_option = typer.Option(
     "-l",
@@ -48,31 +46,25 @@ limit_option = typer.Option(
 site_option = typer.Option(
     "-s",
     "--site",
-    help="Specify a site to use;" +
-    " Ex(kemono.party,coomer.party,kemono.su,coomer.su)"
+    help="Specify a site to use;"
+    + " Ex(kemono.party,coomer.party,kemono.su,coomer.su)",
 )
 
 extension_option = typer.Option(
-    "-e",
-    "--exclude-extension",
-    help="File extension to exclude"
+    "-e", "--exclude-extension", help="File extension to exclude"
 )
 
 worker_option = typer.Option(
-    "-w",
-    "--workers",
-    help="Number of open download connections"
+    "-w", "--workers", help="Number of open download connections"
 )
 
 name_option = typer.Option(
-    help= "If you provided an id in the argument, you can provide a name here" +
-    " to skip user db pull/search."
+    help="If you provided an id in the argument, you can provide a name here"
+    + " to skip user db pull/search."
 )
 
 dir_option = typer.Option(
-    "-d",
-    "--directory",
-    help="Specify an output directory"
+    "-d", "--directory", help="Specify an output directory"
 )
 
 post_id_option = typer.Option(
@@ -98,6 +90,7 @@ file_format_option = typer.Option(
     "combining post_id and ordering the files based on appearance in the post "
     "while keeping the original filename and extension"
 )
+
 
 def pull_user(
     service: str,
@@ -131,7 +124,7 @@ def pull_user(
             typer.secho(
                 f"You attempted the pull with {service}, "
                 "maybe try a different service or search?",
-                fg=typer.colors.BRIGHT_RED
+                fg=typer.colors.BRIGHT_RED,
             )
             sys.exit(3)
     if not directory:
@@ -157,11 +150,14 @@ def pull_user(
     user.write_info(options)
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = list(user.limit_posts(limit))
-        embedded = [embed for p in user.limit_posts(limit) if (embed := p.embed)]
+        embedded = [
+            embed for p in user.limit_posts(limit) if (embed := p.embed)
+        ]
         files = [f for p in posts for f in p.get_files(files)]
         if exclude_extensions:
-            filter_ = lambda x: not any(x["name"].endswith(i)
-                                        for i in exclude_extensions)
+            filter_ = lambda x: not any(
+                x["name"].endswith(i) for i in exclude_extensions
+            )
             files = list(filter(filter_, files))
         if post_id is None:
             fn_set = {i.name for i in files}
@@ -170,6 +166,7 @@ def pull_user(
                     "Duplicate files found, recommend using post_id",
                     fg=typer.colors.BRIGHT_RED,
                 )
+
         def format_filenames(files, format_, permitted=None):
             new_files = {}
             for ref in files:
@@ -182,8 +179,11 @@ def pull_user(
                 if ref.filename not in new_files:
                     new_files[ref.filename] = ref
             return list(new_files.values())
+
         if ordered_short:
-            files = format_filenames(files, file_format, ["jpg", "png", "jpeg"])
+            files = format_filenames(
+                files, file_format, ["jpg", "png", "jpeg"]
+            )
         else:
             files = format_filenames(files, file_format)
         if exclude_external:
@@ -198,15 +198,17 @@ def pull_user(
             f"Embedded objects found; saving to {embed_filename}",
             fg=typer.colors.BRIGHT_MAGENTA,
         )
-        with open(f"{directory}/.embedded", "w",
-                  encoding="utf-8") as embed_file:
+        with open(
+            f"{directory}/.embedded", "w", encoding="utf-8"
+        ) as embed_file:
             json.dump(embedded, embed_file)
     with open(f"{directory}/.posts", "w", encoding="utf-8") as posts_file:
         json.dump(posts, posts_file, for_json=True)
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(
-            download_async(pbar, base_url, directory, files, workers))
+            download_async(pbar, base_url, directory, files, workers)
+        )
     count = Counter(output)
     logger.info(f"Output status: {count}")
 
@@ -218,23 +220,19 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
 
     token = generate_token()
     async with aiohttp.ClientSession(
-            base_url,
-            timeout=timeout,
-            headers={
-                "Accept-Encoding":
-                "gzip, deflate, br",
-                "Cache-Control":
-                "no-cache",
-                "pragma":
-                "no-cache",
-                "User-Agent":
-                "Mozilla/5.0 (X11; Linux x86_64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
-                "Safari/537.36",
-            },
-            cookies={"__ddg2": token},
-    # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
-            connector=conn,
+        base_url,
+        timeout=timeout,
+        headers={
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "no-cache",
+            "pragma": "no-cache",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
+            "Safari/537.36",
+        },
+        cookies={"__ddg2": token},
+        # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
+        connector=conn,
     ) as session:
         output = []
         while len(files) != 0:
@@ -251,7 +249,7 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
                     status = await file.download(session, filename)
                     if status == StatusEnum.ERROR_429 and cworkers > 1:
                         cworkers -= 1
-                        await semaphore.acquire() #decrement workers
+                        await semaphore.acquire()  # decrement workers
                 if status == StatusEnum.ERROR_429:
                     status = file
                 else:
@@ -263,12 +261,13 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
             files.clear()
             for stat in temp:
                 if stat != StatusEnum.SUCCESS and stat != StatusEnum.EXISTS:
-                    files.append(stat) #need to handle other errors here
+                    files.append(stat)  # need to handle other errors here
                 else:
                     output.append(stat)
             if workers > 1:
                 workers -= 1
         return output
+
 
 @APP.command()
 def kemono(
@@ -281,7 +280,7 @@ def kemono(
     post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
     workers: Annotated[int, worker_option] = 4,
-    name: Annotated[str, name_option ] = None,
+    name: Annotated[str, name_option] = None,
     directory: Annotated[str, dir_option] = None,
     post_title: Annotated[bool, post_title_option] = False,
     ordered_short: Annotated[bool, ordered_short_option] = False,
@@ -307,6 +306,7 @@ def kemono(
         file_format=file_format,
     )
 
+
 @APP.command()
 def coomer(
     service: Annotated[str, service_arg],
@@ -318,7 +318,7 @@ def coomer(
     post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
     workers: Annotated[int, worker_option] = 4,
-    name: Annotated[str, name_option ] = None, 
+    name: Annotated[str, name_option] = None,
     directory: Annotated[str, dir_option] = None,
     post_title: Annotated[bool, post_title_option] = False,
     ordered_short: Annotated[bool, ordered_short_option] = False,
@@ -346,27 +346,23 @@ def coomer(
 
 @APP.command(no_args_is_help=True)
 def search(
-        search_str: Annotated[
-            str,
-            typer.Argument(help="used to filter users against name.lower()")
-        ],
-        site: Annotated[
-            str,
-            typer.Argument(help="kemono or coomer")
-        ],
-        service: Annotated[
-            str, 
-            typer.Option(
-                "--service",
-                help="service name to filter users against [patreon,fantia,fanbox,etc...]"
-            )
-        ] = None,
-        exclude_external: bool = True,
-        limit: Annotated[int, limit_option] = None,
-        exclude_extensions: Annotated[list[str], extension_option] = [],
-        interactive: bool = typer.Option(False, "-i", "--interactive"),
-        workers: Annotated[int, worker_option] = 4,
-        directory: Annotated[str, dir_option] = None
+    search_str: Annotated[
+        str, typer.Argument(help="used to filter users against name.lower()")
+    ],
+    site: Annotated[str, typer.Argument(help="kemono or coomer")],
+    service: Annotated[
+        str,
+        typer.Option(
+            "--service",
+            help="service name to filter users against [patreon,fantia,fanbox,etc...]",
+        ),
+    ] = None,
+    exclude_external: bool = True,
+    limit: Annotated[int, limit_option] = None,
+    exclude_extensions: Annotated[list[str], extension_option] = [],
+    interactive: bool = typer.Option(False, "-i", "--interactive"),
+    workers: Annotated[int, worker_option] = 4,
+    directory: Annotated[str, dir_option] = None,
 ):
     """Search function"""
     if site == "kemono":
@@ -379,10 +375,13 @@ def search(
         base_url = "https://coomer.su"
     else:
         logger.info(f"Invalid site: {site}. Use 'kemono' or 'coomer'.")
-        return 
+        return
     users = User.generate_users(base_url)
-    check = ((lambda x: x.service == service and search_str in x.name.lower())
-             if service else (lambda x: search_str in x.name.lower()))
+    check = (
+        (lambda x: x.service == service and search_str in x.name.lower())
+        if service
+        else (lambda x: search_str in x.name.lower())
+    )
     results = [i for i in users if check(i)]
     table = PrettyTable()
     table.field_names = ["Index", "Name", "ID", "Service"]
@@ -397,9 +396,9 @@ def search(
             fg=typer.colors.BRIGHT_GREEN,
         )
         pull_user(
-            user.service, 
+            user.service,
             user.id,
-            base_url, 
+            base_url,
             files=True,
             exclude_external=exclude_external,
             limit=limit,
@@ -407,14 +406,15 @@ def search(
             exclude_extensions=exclude_extensions,
             workers=workers,
             name=user.name,
-            directory=directory
+            directory=directory,
         )
+
 
 @APP.command()
 def custom_parse(
     service: str,
     user_id: str,
-    search: str,    # pylint: disable=redefined-outer-name
+    search: str,  # pylint: disable=redefined-outer-name
     site: str = "https://kemono.party",
     limit: int = None,
 ):
@@ -432,16 +432,18 @@ def custom_parse(
 
 @APP.command()
 def update(
-        folder: str,
-        limit: Annotated[int, limit_option] = None,
-        workers: Annotated[int, worker_option] = 4,
+    folder: str,
+    limit: Annotated[int, limit_option] = None,
+    workers: Annotated[int, worker_option] = 4,
 ):
     """Update an existing pull from a party site"""
     with open(f"{folder}/.info", encoding="utf-8") as info:
         settings = json.load(info)
     # make backwards compatible with old option "--ignore-extensions"
     if "ignore_extensions" in settings["options"]:
-        settings["options"]["exclude_extensions"] = settings["options"].pop("ignore_extensions")
+        settings["options"]["exclude_extensions"] = settings["options"].pop(
+            "ignore_extensions"
+        )
     pull_user(
         settings["user"]["service"],
         settings["user"]["id"],
@@ -454,14 +456,14 @@ def update(
 
 @APP.command()
 def details(
-        service: str,
-        user_id: str,
-        site: str = "https://kemono.party",
-        exclude_extensions: list[str] = typer.Option(None, "-i"),
+    service: str,
+    user_id: str,
+    site: str = "https://kemono.party",
+    exclude_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Show user details: (post#,attachment#,files#)"""
     base_url = site
-    
+
     with yaspin(text="Pulling user DB") as spin:
         user = User.get_user(base_url, service, user_id)
         spin.ok("✔")
@@ -471,12 +473,14 @@ def details(
         files = [p.file for p in posts if p.file]
         if exclude_extensions:
             filter_ = lambda x: not any(
-                x.name.endswith(i) for i in exclude_extensions)
+                x.name.endswith(i) for i in exclude_extensions
+            )
             attachments = list(filter(filter_, attachments))
             files = list(filter(filter_, files))
         spin.ok("✔")
     logger.info(
-        dict(posts=len(posts), attachments=len(attachments), files=len(files)))
+        dict(posts=len(posts), attachments=len(attachments), files=len(files))
+    )
 
 
 @APP.command()
@@ -487,7 +491,7 @@ def embedded_links(
 ):
     """Show user details: (post#,attachment#,files#)"""
     base_url = site
-    
+
     with yaspin(text="Pulling user DB") as spin:
         user = User.get_user(base_url, service, user_id)
         spin.ok("✔")
@@ -506,6 +510,7 @@ def configure(
         return
     logger.remove()
     logger.add(sys.stderr, level="DEBUG")
+
 
 if __name__ == "__main__":
     APP()

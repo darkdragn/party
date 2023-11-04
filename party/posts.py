@@ -47,15 +47,15 @@ class Attachment:
 
     @property
     def base_name(self):
-        return self.name.split('.')[0]
+        return self.name.split(".")[0]
 
     @property
     def extension(self):
-        if '.' not in self.name:
-            hold = self.path.split('/').pop()
+        if "." not in self.name:
+            hold = self.path.split("/").pop()
             self.filename = f"{self.name}_{hold}"
         try:
-            return self.filename.split('.')[1]
+            return self.filename.split(".")[1]
         except:
             print(self)
             print(self.name)
@@ -80,12 +80,13 @@ class Attachment:
         if os.path.exists(filename):
             start = os.stat(filename).st_size
         headers = dict(
-            Range=f"bytes={start}-",
-            referer='https://kemono.party/'
+            Range=f"bytes={start}-", referer="https://kemono.party/"
         )
         # query_name = self.name
         try:
-            async with session.get(self.path + "?f=" + quote(self.name), headers=headers) as resp:
+            async with session.get(
+                self.path + "?f=" + quote(self.name), headers=headers
+            ) as resp:
                 if 199 < resp.status < 300:
                     fbar = tqdm(
                         initial=start,
@@ -98,32 +99,44 @@ class Attachment:
                     )
                     try:
                         async with aiofiles.open(filename, "wb") as output:
-                            async for data in resp.content.iter_chunked(2**16):
+                            async for data in resp.content.iter_chunked(
+                                2**16
+                            ):
                                 await output.write(data)
                                 fbar.update(len(data))
                                 # await asyncio.sleep(0)
-                        if "last-modified" in resp.headers and os.path.exists(filename):
+                        if "last-modified" in resp.headers and os.path.exists(
+                            filename
+                        ):
                             date = parse(resp.headers["last-modified"])
-                            os.utime(filename, (date.timestamp(), date.timestamp()))
+                            os.utime(
+                                filename, (date.timestamp(), date.timestamp())
+                            )
                         fbar.refresh()
                         fbar.close()
                     except aiohttp.client_exceptions.ClientPayloadError as err:
-                        logger.debug(dict(error=err, filename=filename, url=self.path))
+                        logger.debug(
+                            dict(error=err, filename=filename, url=self.path)
+                        )
                         fbar.close()
                         if retries > 2:
-                            status = await self.download(session, filename, retries + 1)
+                            status = await self.download(
+                                session, filename, retries + 1
+                            )
                         else:
                             # os.remove(filename)
                             status = StatusEnum.ERROR_OTHER
                     except OSError as err:
-                        logger.debug(dict(error=err, filename=filename, url=self.path))
+                        logger.debug(
+                            dict(error=err, filename=filename, url=self.path)
+                        )
                         fbar.close()
                         status = StatusEnum.ERROR_OSERROR
                 else:
-                    #logger.debug(
+                    # logger.debug(
                     #    dict(status=resp.status, filename=filename,
                     #        url=resp.url, headers=resp.headers)
-                    #)
+                    # )
                     status = StatusEnum.ERROR_429
         except aiohttp.client_exceptions.TooManyRedirects as err:
             logger.debug(dict(error=err, filename=filename, url=self.path))
@@ -152,7 +165,9 @@ class Post:
     user: str
 
     attachments: Dict[str, str] = field(
-        metadata=desert.metadata(field=fields.Nested(AttachmentSchema, many=True))
+        metadata=desert.metadata(
+            field=fields.Nested(AttachmentSchema, many=True)
+        )
     )
     embed: Dict[Optional[Any], Optional[Any]]
     file: Dict[str, str] = field(
@@ -181,6 +196,4 @@ class Post:
         return PostSchema().dump(self)
 
 
-PostSchema = desert.schema_class(
-    Post, meta=dict(unknown=EXCLUDE)
-)
+PostSchema = desert.schema_class(Post, meta=dict(unknown=EXCLUDE))

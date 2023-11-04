@@ -45,17 +45,28 @@ class User:
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
         resp = requests.get(f"{base_url}/api/v1/creators.txt")
-        return UserSchema(context=dict(site=base_url)).loads(resp.text, many=True)
+        return UserSchema(context=dict(site=base_url)).loads(
+            resp.text, many=True
+        )
 
     @staticmethod
     def return_user(users, service: str, search: str, attr: str):
         try:
             return next(
-                (i for i in users if i.service == service and getattr(i, attr) == search)
+                (
+                    i
+                    for i in users
+                    if i.service == service and getattr(i, attr) == search
+                )
             )
         except StopIteration:
             return next(
-                (i for i in users if i.service == service and getattr(i, attr).lower() == search.lower())
+                (
+                    i
+                    for i in users
+                    if i.service == service
+                    and getattr(i, attr).lower() == search.lower()
+                )
             )
 
     @classmethod
@@ -75,7 +86,7 @@ class User:
             return cls.return_user(users, service, search, attr)
         except StopIteration:
             attr = "name"
-            return cls.return_user(users, service, search, attr) 
+            return cls.return_user(users, service, search, attr)
 
     def generate_posts(self, raw: bool = False) -> Iterator[Post]:
         """Generator for Posts from this user
@@ -120,14 +131,15 @@ class User:
         gen = self.generate_posts()
         return [next(gen, None) for _ in range(limit)]
 
-
     def write_info(self, options: Optional[dict] = None) -> None:
         """Write out user details for pull options
 
         Args:
             options: The cli options used or None
         """
-        with open(f"{self.directory}/.info", "w", encoding="utf-8") as info_out:
+        with open(
+            f"{self.directory}/.info", "w", encoding="utf-8"
+        ) as info_out:
             info_out.write(
                 json.dumps(
                     dict(user=self, options=options),
@@ -160,10 +172,10 @@ class UserSchema(Schema):
 
     @pre_load
     def check_dates(self, data, **kwargs):
-        if isinstance(data['updated'], Number):
-            data['updated'] = datetime.fromtimestamp(data['updated']).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        if isinstance(data['indexed'], Number):
-            data['indexed'] = datetime.fromtimestamp(data['indexed']).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        for date in ["updated", "indexed"]:
+            if isinstance(data[date], Number):
+                hold = datetime.fromtimestamp(data[date])
+                data[date] = hold.strftime("%a, %d %b %Y %H:%M:%S GMT")
         return data
 
     @post_load
