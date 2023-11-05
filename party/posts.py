@@ -20,8 +20,8 @@ from loguru import logger
 from tqdm import tqdm
 from marshmallow import fields, EXCLUDE
 
+from slugify import slugify
 from .common import StatusEnum
-
 
 @dataclass
 class Attachment:
@@ -32,20 +32,16 @@ class Attachment:
         post_id: Not in the api data, added for post_id prepending
     """
 
-    filename: Optional[str]
     name: Optional[str]
     path: Optional[str]
     post_id: Optional[str]
-    post_title: Optional[str]
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
-        if not self.filename:
-            self.filename = self.name
         if self.name is None:
             return
-        if "/" in self.filename:
-            self.filename = self.filename.split("/").pop()
+        self._filename = None
+        self._post_title = ""
 
     @property
     def base_name(self):
@@ -53,15 +49,30 @@ class Attachment:
 
     @property
     def extension(self):
-        if "." not in self.filename:
+        if "." not in self.name:
             hold = self.path.split("/").pop()
-            self.filename = f"{self.filename}_{hold}"
-        try:
-            return self.filename.split(".")[1]
-        except:
-            print(self)
-            print(self.name)
-            raise
+            self.name = f"{self.name}_{hold}"
+        return self.name.split(".")[1]
+
+    @property
+    def filename(self):
+        if self._filename is None:
+            base = slugify(self.base_name)
+            return f"{base}.{self.extension}"
+        else:
+            return self._filename
+        
+    @filename.setter
+    def filename(self, filename):
+        self._filename = filename
+    
+    @property
+    def post_title(self):
+        return self._post_title
+
+    @post_title.setter
+    def post_title(self, post_title):
+        self._post_title = slugify(post_title)
 
     def __getitem__(self, name):
         """Temporary hold over for migration"""
@@ -120,6 +131,8 @@ class Attachment:
                         logger.debug(
                             dict(error=err, filename=filename, url=self.path)
                         )
+                        logger.debug(self)
+                        logger.debug(slugify(self.post_title))
                         fbar.close()
                         if retries > 2:
                             status = await self.download(

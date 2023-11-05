@@ -47,7 +47,7 @@ site_option = typer.Option(
     "-s",
     "--site",
     help="Specify a site to use;"
-    + " Ex(kemono.party,coomer.party,kemono.su,coomer.su)",
+    " Ex(kemono.party,coomer.party,kemono.su,coomer.su)",
 )
 
 extension_option = typer.Option(
@@ -60,7 +60,7 @@ worker_option = typer.Option(
 
 name_option = typer.Option(
     help="If you provided an id in the argument, you can provide a name here"
-    + " to skip user db pull/search."
+    " to skip user db pull/search."
 )
 
 dir_option = typer.Option(
