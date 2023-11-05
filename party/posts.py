@@ -42,7 +42,9 @@ class Attachment:
         # Fix for some filenames containing nested paths
         if not self.filename:
             self.filename = self.name
-        if self.filename and "/" in self.filename:
+        if self.name is None:
+            return
+        if "/" in self.filename:
             self.filename = self.filename.split("/").pop()
 
     @property
@@ -51,9 +53,9 @@ class Attachment:
 
     @property
     def extension(self):
-        if "." not in self.name:
+        if "." not in self.filename:
             hold = self.path.split("/").pop()
-            self.filename = f"{self.name}_{hold}"
+            self.filename = f"{self.filename}_{hold}"
         try:
             return self.filename.split(".")[1]
         except:
@@ -130,6 +132,7 @@ class Attachment:
                         logger.debug(
                             dict(error=err, filename=filename, url=self.path)
                         )
+                        logger.debug(self)
                         fbar.close()
                         status = StatusEnum.ERROR_OSERROR
                 else:

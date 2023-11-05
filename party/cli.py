@@ -133,9 +133,9 @@ def pull_user(
     if not os.path.exists(directory):
         os.mkdir(directory)
     if post_id:
-        file_format = "{ref.post_id}_{ref.name}"
+        file_format = "{ref.post_id}_{ref.filename}"
     if post_title:
-        file_format = "{ref.post_title}_{ref.name}"
+        file_format = "{ref.post_title}_{ref.filename}"
     if ordered_short:
         file_format = "{ref.post_id}_{ref.index:03}.{ref.extension}"
     options = dict(
