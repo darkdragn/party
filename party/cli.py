@@ -20,7 +20,7 @@ from tqdm import tqdm
 from typing_extensions import Annotated
 from yaspin import yaspin
 
-from .common import generate_token, StatusEnum
+from .common import generate_token, StatusEnum, update_csluglify
 from .user import User
 
 if sys.platform == "win32":
@@ -107,6 +107,7 @@ def pull_user(
     post_title: bool = False,
     ordered_short: bool = False,
     file_format: str = "{ref.filename}",
+    sluglify: bool = False,
 ):
     logger.debug(f"Excluded Extensions: {exclude_extensions}")
     if name:
@@ -146,7 +147,10 @@ def pull_user(
         directory=directory,
         ordered_short=ordered_short,
         file_format=file_format,
+        sluglify=sluglify,
     )
+
+    update_csluglify(sluglify)
     user.write_info(options)
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = list(
@@ -285,6 +289,7 @@ def kemono(
     post_title: Annotated[bool, post_title_option] = False,
     ordered_short: Annotated[bool, ordered_short_option] = False,
     file_format: Annotated[str, file_format_option] = "{ref.filename}",
+    sluglify: bool = False,
 ):
 
     """Quick download command for kemono.party"""
@@ -304,6 +309,7 @@ def kemono(
         post_title=post_title,
         ordered_short=ordered_short,
         file_format=file_format,
+        sluglify=sluglify,
     )
 
 
@@ -323,6 +329,7 @@ def coomer(
     post_title: Annotated[bool, post_title_option] = False,
     ordered_short: Annotated[bool, ordered_short_option] = False,
     file_format: Annotated[str, file_format_option] = "{ref.filename}",
+    sluglify: bool = False,
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = site
@@ -341,6 +348,7 @@ def coomer(
         post_title=post_title,
         ordered_short=ordered_short,
         file_format=file_format,
+        sluglify=sluglify,
     )
 
 

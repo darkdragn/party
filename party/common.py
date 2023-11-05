@@ -2,6 +2,16 @@ import binascii
 import random
 from enum import Enum
 
+csluglify = False
+
+def get_csluglify():
+    global csluglify
+    return csluglify
+
+def update_csluglify(value):
+    global csluglify
+    csluglify = value
+
 
 class StatusEnum(Enum):
     """Enum for reporting the status of downloads"""

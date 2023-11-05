@@ -21,7 +21,8 @@ from tqdm import tqdm
 from marshmallow import fields, EXCLUDE
 
 from slugify import slugify
-from .common import StatusEnum
+from .common import StatusEnum, get_csluglify
+
 
 @dataclass
 class Attachment:
@@ -57,22 +58,28 @@ class Attachment:
     @property
     def filename(self):
         if self._filename is None:
-            base = slugify(self.base_name)
+            if get_csluglify():
+                base = slugify(self.base_name)
+            else:
+                base = self.base_name
             return f"{base}.{self.extension}"
         else:
             return self._filename
-        
+
     @filename.setter
     def filename(self, filename):
         self._filename = filename
-    
+
     @property
     def post_title(self):
         return self._post_title
 
     @post_title.setter
     def post_title(self, post_title):
-        self._post_title = slugify(post_title)
+        if get_csluglify():
+            self._post_title = slugify(post_title)
+        else:
+            self._post_title = post_title
 
     def __getitem__(self, name):
         """Temporary hold over for migration"""
