@@ -20,7 +20,13 @@ from tqdm import tqdm
 from typing_extensions import Annotated
 from yaspin import yaspin
 
-from .common import generate_token, StatusEnum, update_csluglify
+from .common import (
+    generate_token,
+    StatusEnum,
+    update_csluglify,
+    write_etags,
+    load_etags,
+)
 from .user import User
 
 if sys.platform == "win32":
@@ -108,6 +114,7 @@ def pull_user(
     ordered_short: bool = False,
     file_format: str = "{ref.filename}",
     sluglify: bool = False,
+    full_check: bool = False,
 ):
     logger.debug(f"Excluded Extensions: {exclude_extensions}")
     if name:
@@ -133,6 +140,8 @@ def pull_user(
     user.directory = directory
     if not os.path.exists(directory):
         os.mkdir(directory)
+    if os.path.exists(f"{directory}/.etags"):
+        load_etags(directory)
     if post_id:
         file_format = "{ref.post_id}_{ref.filename}"
     if post_title:
@@ -167,7 +176,7 @@ def pull_user(
             fn_set = {i.name for i in files}
             if len(files) > len(fn_set):
                 typer.secho(
-                    "Duplicate files found, recommend using post_id",
+                    "  Duplicate files found, recommend using post_id",
                     fg=typer.colors.BRIGHT_RED,
                 )
 
@@ -198,9 +207,8 @@ def pull_user(
                     i.name = i.name.split("/").pop()
     if embedded:
         embed_filename = f"{directory}/.embedded"
-        typer.secho(
+        logger.debug(
             f"Embedded objects found; saving to {embed_filename}",
-            fg=typer.colors.BRIGHT_MAGENTA,
         )
         with open(
             f"{directory}/.embedded", "w", encoding="utf-8"
@@ -211,16 +219,26 @@ def pull_user(
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(
-            download_async(pbar, base_url, directory, files, workers)
+            download_async(
+                pbar, base_url, directory, files, workers, full_check
+            )
         )
+    write_etags(directory)
     count = Counter(output)
     logger.info(f"Output status: {count}")
 
 
-async def download_async(pbar, base_url, directory, files, workers: int = 10):
+async def download_async(
+    pbar,
+    base_url,
+    directory,
+    files,
+    workers: int = 10,
+    full_check: bool = False,
+):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
-    conn = aiohttp.TCPConnector(limit_per_host=2)
+    conn = aiohttp.TCPConnector(limit=workers, limit_per_host=2, force_close=True)
 
     token = generate_token()
     async with aiohttp.ClientSession(
@@ -235,7 +253,6 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
             "Safari/537.36",
         },
         cookies={"__ddg2": token},
-        # cookies={"__ddg1_":"qizlDnO45jI7QjIcwCXk"},
         connector=conn,
     ) as session:
         output = []
@@ -245,26 +262,33 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
 
             async def download(file):
                 nonlocal cworkers
+                nonlocal full_check
+                nonlocal semaphore
                 filename = f"{directory}/{file.filename}"
-                if os.path.exists(filename):
-                    pbar.update(1)
-                    return StatusEnum.EXISTS
                 async with semaphore:
-                    status = await file.download(session, filename)
+                    status = await file.download(
+                        session, filename, 0, full_check
+                    )
                     if status == StatusEnum.ERROR_429 and cworkers > 1:
                         cworkers -= 1
+                        logger.debug(f"429, decreasing workers to {cworkers}")
                         await semaphore.acquire()  # decrement workers
                 if status == StatusEnum.ERROR_429:
                     status = file
                 else:
                     pbar.update(1)
+                    write_etags(directory)
                 return status
 
             downloads = [download(f) for f in files]
             temp = await asyncio.gather(*downloads)
             files.clear()
             for stat in temp:
-                if stat != StatusEnum.SUCCESS and stat != StatusEnum.EXISTS:
+                if stat not in [
+                    StatusEnum.EXISTS,
+                    StatusEnum.SUCCESS,
+                    StatusEnum.DUPLICATE,
+                ]:
                     files.append(stat)  # need to handle other errors here
                 else:
                     output.append(stat)
@@ -277,21 +301,21 @@ async def download_async(pbar, base_url, directory, files, workers: int = 10):
 def kemono(
     service: Annotated[str, service_arg],
     user_id: Annotated[str, userid_arg],
-    site: str = "https://kemono.party",
+    site: str = "https://kemono.su",
     files: bool = True,
     exclude_external: bool = True,
     limit: Annotated[int, limit_option] = None,
     post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
-    workers: Annotated[int, worker_option] = 4,
+    workers: Annotated[int, worker_option] = 32,
     name: Annotated[str, name_option] = None,
     directory: Annotated[str, dir_option] = None,
     post_title: Annotated[bool, post_title_option] = False,
     ordered_short: Annotated[bool, ordered_short_option] = False,
     file_format: Annotated[str, file_format_option] = "{ref.filename}",
     sluglify: bool = False,
+    full_check: bool = False,
 ):
-
     """Quick download command for kemono.party"""
     base = site
     pull_user(
@@ -310,6 +334,7 @@ def kemono(
         ordered_short=ordered_short,
         file_format=file_format,
         sluglify=sluglify,
+        full_check=full_check,
     )
 
 
@@ -330,6 +355,7 @@ def coomer(
     ordered_short: Annotated[bool, ordered_short_option] = False,
     file_format: Annotated[str, file_format_option] = "{ref.filename}",
     sluglify: bool = False,
+    full_check: bool = False,
 ):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     base = site
@@ -349,6 +375,7 @@ def coomer(
         ordered_short=ordered_short,
         file_format=file_format,
         sluglify=sluglify,
+        full_check=full_check,
     )
 
 
@@ -369,13 +396,11 @@ def search(
     limit: Annotated[int, limit_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
     interactive: bool = typer.Option(False, "-i", "--interactive"),
-    workers: Annotated[int, worker_option] = 4,
+    workers: Annotated[int, worker_option] = 32,
     directory: Annotated[str, dir_option] = None,
 ):
     """Search function"""
     if site == "kemono":
-        base_url = "https://kemono.party"
-    elif site == "kemono.su":
         base_url = "https://kemono.su"
     elif site == "coomer":
         base_url = "https://coomer.party"
@@ -392,9 +417,9 @@ def search(
     )
     results = [i for i in users if check(i)]
     table = PrettyTable()
-    table.field_names = ["Index", "Name", "ID", "Service"]
+    table.field_names = ["Index", "Name", "ID", "Service", "Updated", "Indexed"]
     for num, result in enumerate(results):
-        table.add_row([num, result.name, result.id, result.service])
+        table.add_row([num, result.name, result.id, result.service, result.updated, result.indexed])
     print(table)
     if interactive:
         selection = typer.prompt("Index selection: ", type=int)
@@ -433,7 +458,7 @@ def custom_parse(
     if not os.path.exists(user.name):
         os.mkdir(user.name)
     logger.info(f"Downloading {user.name}")
-    posts = user.limit_posts(limit)
+    posts = user.limit_posts(limit) if limit else user.generate_posts()
     output = [i for p in posts for i in re.findall(search, p.content)]
     print(json.dumps(output))
 
@@ -443,6 +468,7 @@ def update(
     folder: str,
     limit: Annotated[int, limit_option] = None,
     workers: Annotated[int, worker_option] = 4,
+    full_check: bool = False,
 ):
     """Update an existing pull from a party site"""
     with open(f"{folder}/.info", encoding="utf-8") as info:
@@ -458,6 +484,7 @@ def update(
         name=settings["user"]["name"],
         workers=workers,
         limit=limit,
+        full_check=full_check,
         **settings["options"],
     )
 
@@ -513,11 +540,12 @@ def configure(
     verbose: bool = False,
 ):
     """A quick cli for downloading from party-chan sites"""
-
-    if verbose:
-        return
     logger.remove()
-    logger.add(sys.stderr, level="DEBUG")
+    if verbose:
+        logger.add(sys.stderr, level="DEBUG")
+    else:
+        logger.add(sys.stdout, level="INFO")
+        logger.add(".party-debug.log", level="DEBUG", colorize=False, backtrace=True, diagnose=True)
 
 
 if __name__ == "__main__":

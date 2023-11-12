@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote
 from urllib3.exceptions import ConnectTimeoutError
 
-import aiofiles
+import aiofile
 import aiohttp
 import desert
 
@@ -21,7 +21,7 @@ from tqdm import tqdm
 from marshmallow import fields, EXCLUDE
 
 from slugify import slugify
-from .common import StatusEnum, get_csluglify
+from .common import StatusEnum, get_csluglify, etag_exists, add_etag
 
 
 @dataclass
@@ -35,7 +35,7 @@ class Attachment:
 
     name: Optional[str]
     path: Optional[str]
-    post_id: Optional[str]
+    post_id: Optional[int]
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
@@ -53,7 +53,8 @@ class Attachment:
         if "." not in self.name:
             hold = self.path.split("/").pop()
             self.name = f"{self.name}_{hold}"
-        return self.name.split(".")[1]
+        ext = self.name.split(".")[1]
+        return ext if ext != "jpe" else "jpg"
 
     @property
     def filename(self):
@@ -92,21 +93,40 @@ class Attachment:
     def __bool__(self):
         return bool(self.name)
 
-    async def download(self, session, filename: str = ".", retries: int = 0):
+    async def download(
+        self,
+        session,
+        filename: str = ".",
+        retries: int = 0,
+        full_check: bool = False,
+    ):
         """Async download handler"""
         status = StatusEnum.SUCCESS
         headers = {}
         start = 0
+        url = self.path + "?f=" + quote(self.name)
         if os.path.exists(filename):
+            if not full_check:
+                return StatusEnum.EXISTS
             start = os.stat(filename).st_size
         headers = dict(
             Range=f"bytes={start}-", referer="https://kemono.party/"
         )
-        # query_name = self.name
         try:
-            async with session.get(
-                self.path + "?f=" + quote(self.name), headers=headers
-            ) as resp:
+            async with session.head(url, allow_redirects=True) as head:
+                if head.status == 429:
+                    return StatusEnum.ERROR_429
+                try:
+                    tag = head.headers["etag"]
+                except:
+                    logger.info(head.status)
+                    logger.info(head.headers)
+                    raise
+                if etag_exists(tag):
+                    return StatusEnum.DUPLICATE
+                add_etag(tag)
+
+            async with session.get(url, headers=headers) as resp:
                 if 199 < resp.status < 300:
                     fbar = tqdm(
                         initial=start,
@@ -117,14 +137,19 @@ class Attachment:
                         unit_scale=True,
                         leave=False,
                     )
+                    # tag = resp.headers['etag']
+                    # if etag_exists(tag):
+                    #     return StatusEnum.DUPLICATE
+                    # add_etag(tag)
                     try:
-                        async with aiofiles.open(filename, "wb") as output:
+                        async with aiofile.async_open(
+                            filename, "ab"
+                        ) as output:
                             async for data in resp.content.iter_chunked(
-                                3**16
+                                2**16
                             ):
                                 await output.write(data)
                                 fbar.update(len(data))
-                                # await asyncio.sleep(0)
                         if "last-modified" in resp.headers and os.path.exists(
                             filename
                         ):
@@ -146,7 +171,7 @@ class Attachment:
                                 session, filename, retries + 1
                             )
                         else:
-                            # os.remove(filename)
+                            os.remove(filename)
                             status = StatusEnum.ERROR_OTHER
                     except OSError as err:
                         logger.debug(
@@ -155,12 +180,20 @@ class Attachment:
                         logger.debug(self)
                         fbar.close()
                         status = StatusEnum.ERROR_OSERROR
-                else:
-                    # logger.debug(
-                    #    dict(status=resp.status, filename=filename,
-                    #        url=resp.url, headers=resp.headers)
-                    # )
+                elif resp.status == 416:
+                    status = StatusEnum.EXISTS
+                elif resp.status == 429:
                     status = StatusEnum.ERROR_429
+                else:
+                    logger.debug(
+                        dict(
+                            status=resp.status,
+                            filename=filename,
+                            url=resp.url,
+                            headers=resp.headers,
+                        )
+                    )
+                    status = StatusEnum.ERROR_OTHER
         except aiohttp.client_exceptions.TooManyRedirects as err:
             logger.debug(dict(error=err, filename=filename, url=self.path))
             status = StatusEnum.ERROR_OTHER
@@ -180,7 +213,7 @@ class Post:
     content: str
     edited: Optional[datetime]
     # str necessary since some coomer returns string for id
-    id: str
+    id: int
     published: Optional[str]
     service: str
     shared_file: bool
