@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote
 from urllib3.exceptions import ConnectTimeoutError
 
-import aiofile
+import aiofiles
 import aiohttp
 import desert
 
@@ -137,14 +137,8 @@ class Attachment:
                         unit_scale=True,
                         leave=False,
                     )
-                    # tag = resp.headers['etag']
-                    # if etag_exists(tag):
-                    #     return StatusEnum.DUPLICATE
-                    # add_etag(tag)
                     try:
-                        async with aiofile.async_open(
-                            filename, "ab"
-                        ) as output:
+                        async with aiofiles.open(filename, "ab") as output:
                             async for data in resp.content.iter_chunked(
                                 2**16
                             ):
