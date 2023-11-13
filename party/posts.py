@@ -50,7 +50,7 @@ class Attachment:
 
     @property
     def extension(self):
-        if "." not in self.name:
+        if "." not in self.name[-6:]:
             hold = self.path.split("/").pop()
             self.name = f"{self.name}_{hold}"
         ext = self.name.split(".")[1]
@@ -119,10 +119,10 @@ class Attachment:
                 try:
                     tag = head.headers["etag"]
                 except:
-                    logger.info(head.status)
-                    logger.info(head.headers)
+                    logger.debug(head.status)
+                    logger.debug(head.headers)
                     raise
-                if etag_exists(tag):
+                if etag_exists(tag) and not os.path.exists(filename):
                     return StatusEnum.DUPLICATE
                 add_etag(tag)
 

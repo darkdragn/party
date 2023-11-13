@@ -161,6 +161,8 @@ def pull_user(
 
     update_csluglify(sluglify)
     user.write_info(options)
+    logger.debug(f"Working on: {service} {user.id} {user.name} with {workers} workers")
+    logger.debug(options)
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = list(
             user.limit_posts(limit) if limit else user.generate_posts()
@@ -237,7 +239,7 @@ async def download_async(
     full_check: bool = False,
 ):
     """Basic AsyncIO implementation of downloads for files"""
-    timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=15)
+    timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=30)
     conn = aiohttp.TCPConnector(limit=workers, limit_per_host=2, force_close=True)
 
     token = generate_token()
@@ -533,6 +535,23 @@ def embedded_links(
     with yaspin(text=f"User found: {user.name}; parsing posts...") as spin:
         embedded = [embed for p in user.posts if (embed := p.embed)]
         typer.echo(json.dumps(embedded), err=True)
+
+
+@APP.command()
+def dump_posts(
+    service: Annotated[str, service_arg],
+    user_id: Annotated[str, userid_arg],
+    name: str,
+    site: str = "https://kemono.su",
+    limit: Annotated[int, limit_option] = None,
+    directory: Annotated[bool, dir_option] = True,
+):
+    creator = User(user_id, name, service, site=site)
+    output = f"{name}/.posts" if directory else ".posts_{name}"
+    if directory and not os.path.exists(name):
+        os.path.mkdir(name)
+    with open(output, 'w') as file_:
+        json.dump(creator.posts, file_, for_json=True)
 
 
 @APP.callback()
