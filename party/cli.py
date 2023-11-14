@@ -350,7 +350,7 @@ def coomer(
     limit: Annotated[int, limit_option] = None,
     post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
-    workers: Annotated[int, worker_option] = 4,
+    workers: Annotated[int, worker_option] = 32,
     name: Annotated[str, name_option] = None,
     directory: Annotated[str, dir_option] = None,
     post_title: Annotated[bool, post_title_option] = False,

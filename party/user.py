@@ -13,6 +13,7 @@ from typing import Generator, Iterator, List, Optional
 
 import requests
 import simplejson as json
+from loguru import logger
 from marshmallow import Schema, fields, post_load, EXCLUDE, pre_load
 
 # from .notes import populate_posts
@@ -100,8 +101,11 @@ class User:
             if offset != 0 and offset % 50 != 0:
                 break
             resp = requests.get(self.url, params=dict(o=offset, limit=50))
+            logger.debug(resp.url)
             try:
                 posts = resp.json()
+                if not posts:
+                    break
             except requests.exceptions.JSONDecodeError as e:
                 print(resp.request.url)
                 raise e
