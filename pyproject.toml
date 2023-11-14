@@ -1,6 +1,6 @@
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.6.7"
+version = "0.6.8"
 tag_format = "v$version"
 version_files = [
   "pyproject.toml:version",
@@ -8,7 +8,7 @@ version_files = [
 
 [tool.poetry]
 name = "party"
-version = "0.6.7"
+version = "0.6.8"
 description = ""
 authors = ["darkdragn <darkdragn.cj@gmail.com>"]
 packages = [
