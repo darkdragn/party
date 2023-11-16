@@ -4,10 +4,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
-from itertools import islice
 
 from numbers import Number
-from typing import Generator, Iterator, List, Optional
+from typing import Iterator, List, Optional
 
 # from urllib3.exceptions import ConnectTimeoutError
 
@@ -45,30 +44,23 @@ class User:
     @staticmethod
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
-        resp = requests.get(f"{base_url}/api/v1/creators.txt")
-        return UserSchema(context=dict(site=base_url)).loads(
+        resp = requests.get(f"{base_url}/api/v1/creators.txt", timeout=90)
+        return UserSchema(context={"site": base_url}, unknown=EXCLUDE).loads(
             resp.text, many=True
         )
 
     @staticmethod
     def return_user(users, service: str, search: str, attr: str):
-        try:
-            return next(
-                (
-                    i
-                    for i in users
-                    if i.service == service and getattr(i, attr) == search
-                )
-            )
-        except StopIteration:
-            return next(
-                (
-                    i
-                    for i in users
-                    if i.service == service
-                    and getattr(i, attr).lower() == search.lower()
-                )
-            )
+        """Find a user in the mass json returned by the API"""
+        for i in users:
+            if i.service == service and getattr(i, attr) == search:
+                return i
+        for i in users:
+            if (
+                i.service == service
+                and getattr(i, attr).lower() == search.lower()
+            ):
+                return i
 
     @classmethod
     def get_user(cls, base_url: str, service: str, search: str):
@@ -100,15 +92,17 @@ class User:
         while True:
             if offset != 0 and offset % 50 != 0:
                 break
-            resp = requests.get(self.url, params=dict(o=offset, limit=50))
+            resp = requests.get(
+                self.url, params={"o": offset, "limit": 50}, timeout=60
+            )
             logger.debug(resp.url)
             try:
                 posts = resp.json()
                 if not posts:
                     break
-            except requests.exceptions.JSONDecodeError as e:
+            except requests.exceptions.JSONDecodeError as err:
                 print(resp.request.url)
-                raise e
+                raise err
             for post in posts:
                 offset += 1
                 if raw:
@@ -146,7 +140,7 @@ class User:
         ) as info_out:
             info_out.write(
                 json.dumps(
-                    dict(user=self, options=options),
+                    {"user": self, "options": options},
                     for_json=True,
                 )
             )
@@ -176,6 +170,7 @@ class UserSchema(Schema):
 
     @pre_load
     def check_dates(self, data, **kwargs):
+        """Parse and render the date in a common format"""
         for date in ["updated", "indexed"]:
             if isinstance(data[date], Number):
                 hold = datetime.fromtimestamp(data[date])
@@ -183,11 +178,8 @@ class UserSchema(Schema):
         return data
 
     @post_load
-    def create_user(self, data, many, partial):
+    def create_user(self, data, **kwargs):
         """Deserialize wrapper for creating User Dataclass"""
         if self.context:
             return User(site=self.context["site"], **data)
         return User(**data)
-
-    class Meta:
-        unknown = EXCLUDE

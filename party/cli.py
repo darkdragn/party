@@ -7,7 +7,7 @@ import os
 import re
 import sys
 
-from typing import Counter, Union
+from typing import Counter
 from urllib3.exceptions import ConnectTimeoutError
 
 import aiohttp
@@ -15,6 +15,8 @@ import simplejson as json
 import typer
 
 from loguru import logger
+from marshmallow_jsonschema import JSONSchema
+from merge_args import merge_args
 from prettytable import PrettyTable
 from tqdm import tqdm
 from typing_extensions import Annotated
@@ -26,7 +28,9 @@ from .common import (
     update_csluglify,
     write_etags,
     load_etags,
+    format_filenames,
 )
+from .posts import AttachmentSchema
 from .user import User
 
 if sys.platform == "win32":
@@ -99,34 +103,34 @@ file_format_option = typer.Option(
 
 
 def pull_user(
-    service: str,
-    user_id: str,
-    base_url: str,
-    files: bool,
-    exclude_external: bool,
-    limit: int,
-    exclude_extensions: list[str],
-    workers: int,
-    name: str,
-    post_id: bool = False,
-    directory: str = None,
-    post_title: bool = False,
-    ordered_short: bool = False,
-    file_format: str = "{ref.filename}",
+    service: Annotated[str, service_arg],
+    user_id: Annotated[str, userid_arg],
+    site: str = "",
+    files: bool = True,
+    exclude_external: bool = True,
+    limit: Annotated[int, limit_option] = None,
+    post_id: Annotated[bool, post_id_option] = None,
+    exclude_extensions: Annotated[list[str], extension_option] = [],
+    workers: Annotated[int, worker_option] = 32,
+    name: Annotated[str, name_option] = None,
+    directory: Annotated[str, dir_option] = None,
+    post_title: Annotated[bool, post_title_option] = False,
+    ordered_short: Annotated[bool, ordered_short_option] = False,
+    file_format: Annotated[str, file_format_option] = "{ref.filename}",
     sluglify: bool = False,
     full_check: bool = False,
 ):
     logger.debug(f"Excluded Extensions: {exclude_extensions}")
     if name:
-        user = User(user_id, name, service, site=base_url)
+        user = User(user_id, name, service, site=site)
     else:
         try:
             with yaspin().shark as spin:
                 spin.text = "Pulling user DB"
-                user = User.get_user(base_url, service, user_id)
+                user = User.get_user(site, service, user_id)
         except ConnectTimeoutError:
             typer.secho("Connection error occured", fg=typer.colors.BRIGHT_RED)
-            typer.Exit(3)
+            sys.exit(3)
         except StopIteration:
             typer.secho("User not found.", fg=typer.colors.BRIGHT_RED)
             typer.secho(
@@ -135,8 +139,7 @@ def pull_user(
                 fg=typer.colors.BRIGHT_RED,
             )
             sys.exit(3)
-    if not directory:
-        directory = user.name
+    directory = user.name if not directory else directory
     user.directory = directory
     if not os.path.exists(directory):
         os.mkdir(directory)
@@ -144,15 +147,15 @@ def pull_user(
         load_etags(directory)
     if post_id:
         file_format = "{ref.post_id}_{ref.filename}"
-    if post_title:
+    elif post_title:
         file_format = "{ref.post_title}_{ref.filename}"
-    if ordered_short:
+    elif ordered_short:
         file_format = "{ref.post_id}_{ref.index:03}.{ref.extension}"
     options = dict(
         exclude_extensions=exclude_extensions,
         files=files,
         exclude_external=exclude_external,
-        base_url=base_url,
+        site=site,
         directory=directory,
         ordered_short=ordered_short,
         file_format=file_format,
@@ -161,7 +164,9 @@ def pull_user(
 
     update_csluglify(sluglify)
     user.write_info(options)
-    logger.debug(f"Working on: {service} {user.id} {user.name} with {workers} workers")
+    logger.debug(
+        f"Working on: {service} {user.id} {user.name} with {workers} workers"
+    )
     logger.debug(options)
     with yaspin(text=f"User found: {user.name}; parsing posts..."):
         posts = list(
@@ -170,31 +175,14 @@ def pull_user(
         embedded = [embed for p in posts if (embed := p.embed)]
         files = [f for p in posts for f in p.get_files(files)]
         if exclude_extensions:
-            filter_ = lambda x: not any(
-                x["name"].endswith(i) for i in exclude_extensions
-            )
-            files = list(filter(filter_, files))
-        if post_id is None:
-            fn_set = {i.name for i in files}
-            if len(files) > len(fn_set):
-                typer.secho(
-                    "  Duplicate files found, recommend using post_id",
-                    fg=typer.colors.BRIGHT_RED,
+            files = list(
+                filter(
+                    lambda x: not any(
+                        x["name"].endswith(i) for i in exclude_extensions
+                    ),
+                    files,
                 )
-
-        def format_filenames(files, format_, permitted=None):
-            new_files = {}
-            for ref in files:
-                if permitted:
-                    ref.filename = ref.name
-                    if ref.extension in permitted:
-                        ref.filename = format_.format(ref=ref)
-                else:
-                    ref.filename = format_.format(ref=ref)
-                if ref.filename not in new_files:
-                    new_files[ref.filename] = ref
-            return list(new_files.values())
-
+            )
         if ordered_short:
             files = format_filenames(
                 files, file_format, ["jpg", "png", "jpeg"]
@@ -221,9 +209,7 @@ def pull_user(
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(
-            download_async(
-                pbar, base_url, directory, files, workers, full_check
-            )
+            download_async(pbar, site, directory, files, workers, full_check)
         )
     write_etags(directory)
     count = Counter(output)
@@ -240,9 +226,10 @@ async def download_async(
 ):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=30)
-    conn = aiohttp.TCPConnector(limit=workers, limit_per_host=2, force_close=True)
+    conn = aiohttp.TCPConnector(
+        limit=workers, limit_per_host=2, force_close=True
+    )
 
-    token = generate_token()
     async with aiohttp.ClientSession(
         base_url,
         timeout=timeout,
@@ -254,26 +241,24 @@ async def download_async(
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
             "Safari/537.36",
         },
-        cookies={"__ddg2": token},
+        cookies={"__ddg2": generate_token()},
         connector=conn,
     ) as session:
         output = []
         while len(files) != 0:
             semaphore = asyncio.Semaphore(workers)
-            cworkers = workers
+            # cworkers = workers
 
             async def download(file):
-                nonlocal cworkers
-                nonlocal full_check
-                nonlocal semaphore
+                nonlocal workers
                 filename = f"{directory}/{file.filename}"
                 async with semaphore:
                     status = await file.download(
                         session, filename, 0, full_check
                     )
-                    if status == StatusEnum.ERROR_429 and cworkers > 1:
-                        cworkers -= 1
-                        logger.debug(f"429, decreasing workers to {cworkers}")
+                    if status == StatusEnum.ERROR_429 and workers > 1:
+                        workers = workers - 1
+                        logger.debug(f"429, decreasing workers to {workers}")
                         await semaphore.acquire()  # decrement workers
                 if status == StatusEnum.ERROR_429:
                     status = file
@@ -300,85 +285,17 @@ async def download_async(
 
 
 @APP.command()
-def kemono(
-    service: Annotated[str, service_arg],
-    user_id: Annotated[str, userid_arg],
-    site: str = "https://kemono.su",
-    files: bool = True,
-    exclude_external: bool = True,
-    limit: Annotated[int, limit_option] = None,
-    post_id: Annotated[bool, post_id_option] = None,
-    exclude_extensions: Annotated[list[str], extension_option] = [],
-    workers: Annotated[int, worker_option] = 32,
-    name: Annotated[str, name_option] = None,
-    directory: Annotated[str, dir_option] = None,
-    post_title: Annotated[bool, post_title_option] = False,
-    ordered_short: Annotated[bool, ordered_short_option] = False,
-    file_format: Annotated[str, file_format_option] = "{ref.filename}",
-    sluglify: bool = False,
-    full_check: bool = False,
-):
+@merge_args(pull_user)
+def kemono(ctx: typer.Context, site: str = "https://kemono.su", **kwargs):
     """Quick download command for kemono.party"""
-    base = site
-    pull_user(
-        service,
-        user_id,
-        base,
-        files=files,
-        exclude_external=exclude_external,
-        limit=limit,
-        post_id=post_id,
-        exclude_extensions=exclude_extensions,
-        workers=workers,
-        name=name,
-        directory=directory,
-        post_title=post_title,
-        ordered_short=ordered_short,
-        file_format=file_format,
-        sluglify=sluglify,
-        full_check=full_check,
-    )
+    pull_user(**ctx.params)
 
 
 @APP.command()
-def coomer(
-    service: Annotated[str, service_arg],
-    user_id: Annotated[str, userid_arg],
-    site: str = "https://coomer.party",
-    files: bool = True,
-    exclude_external: bool = True,
-    limit: Annotated[int, limit_option] = None,
-    post_id: Annotated[bool, post_id_option] = None,
-    exclude_extensions: Annotated[list[str], extension_option] = [],
-    workers: Annotated[int, worker_option] = 32,
-    name: Annotated[str, name_option] = None,
-    directory: Annotated[str, dir_option] = None,
-    post_title: Annotated[bool, post_title_option] = False,
-    ordered_short: Annotated[bool, ordered_short_option] = False,
-    file_format: Annotated[str, file_format_option] = "{ref.filename}",
-    sluglify: bool = False,
-    full_check: bool = False,
-):
+@merge_args(pull_user)
+def coomer(ctx: typer.Context, site: str = "https://coomer.su", **kwargs):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
-    base = site
-    pull_user(
-        service,
-        user_id,
-        base,
-        files=files,
-        exclude_external=exclude_external,
-        limit=limit,
-        post_id=post_id,
-        exclude_extensions=exclude_extensions,
-        workers=workers,
-        name=name,
-        directory=directory,
-        post_title=post_title,
-        ordered_short=ordered_short,
-        file_format=file_format,
-        sluglify=sluglify,
-        full_check=full_check,
-    )
+    pull_user(**ctx.params)
 
 
 @APP.command(no_args_is_help=True)
@@ -400,7 +317,7 @@ def search(
     interactive: bool = typer.Option(False, "-i", "--interactive"),
     workers: Annotated[int, worker_option] = 32,
     directory: Annotated[str, dir_option] = None,
-):
+):  # pylint: disable=W0102, R0913, R0914
     """Search function"""
     if site == "kemono":
         base_url = "https://kemono.su"
@@ -419,9 +336,25 @@ def search(
     )
     results = [i for i in users if check(i)]
     table = PrettyTable()
-    table.field_names = ["Index", "Name", "ID", "Service", "Updated", "Indexed"]
+    table.field_names = [
+        "Index",
+        "Name",
+        "ID",
+        "Service",
+        "Updated",
+        "Indexed",
+    ]
     for num, result in enumerate(results):
-        table.add_row([num, result.name, result.id, result.service, result.updated, result.indexed])
+        table.add_row(
+            [
+                num,
+                result.name,
+                result.id,
+                result.service,
+                result.updated,
+                result.indexed,
+            ]
+        )
     print(table)
     if interactive:
         selection = typer.prompt("Index selection: ", type=int)
@@ -480,6 +413,9 @@ def update(
         settings["options"]["exclude_extensions"] = settings["options"].pop(
             "ignore_extensions"
         )
+    # backwards compatible with old options
+    if "base_url" in settings["options"]:
+        settings["options"]["site"] = settings["options"].pop("base_url")
     pull_user(
         settings["user"]["service"],
         settings["user"]["id"],
@@ -499,10 +435,9 @@ def details(
     exclude_extensions: list[str] = typer.Option(None, "-i"),
 ):
     """Show user details: (post#,attachment#,files#)"""
-    base_url = site
 
     with yaspin(text="Pulling user DB") as spin:
-        user = User.get_user(base_url, service, user_id)
+        user = User.get_user(site, service, user_id)
         spin.ok("✔")
     with yaspin(text=f"User found: {user.name}; parsing posts...") as spin:
         posts = user.posts
@@ -527,10 +462,9 @@ def embedded_links(
     site: str = "https://kemono.party",
 ):
     """Show user details: (post#,attachment#,files#)"""
-    base_url = site
 
     with yaspin(text="Pulling user DB") as spin:
-        user = User.get_user(base_url, service, user_id)
+        user = User.get_user(site, service, user_id)
         spin.ok("✔")
     with yaspin(text=f"User found: {user.name}; parsing posts...") as spin:
         embedded = [embed for p in user.posts if (embed := p.embed)]
@@ -544,14 +478,28 @@ def dump_posts(
     name: str,
     site: str = "https://kemono.su",
     limit: Annotated[int, limit_option] = None,
-    directory: Annotated[bool, dir_option] = True,
+    directory: bool = True,
 ):
+    """Write full posts json to {creator}/.posts or .posts if directory=False"""
     creator = User(user_id, name, service, site=site)
     output = f"{name}/.posts" if directory else ".posts_{name}"
     if directory and not os.path.exists(name):
-        os.path.mkdir(name)
-    with open(output, 'w') as file_:
-        json.dump(creator.posts, file_, for_json=True)
+        os.mkdir(name)
+    with yaspin(text=f"User found: {creator.name}; parsing posts..."):
+        with open(output, "w", encoding="utf-8") as file_:
+            json.dump(
+                creator.limit_posts(limit) if limit else creator.posts,
+                file_,
+                for_json=True,
+            )
+
+
+@APP.command()
+def dump_schemas():
+    """Dump the attachment schema to ID fields for file formatting"""
+    json_schema = JSONSchema()
+    out = json_schema.dumps(AttachmentSchema(), indent=2)
+    print(out)
 
 
 @APP.callback()
@@ -564,7 +512,13 @@ def configure(
         logger.add(sys.stderr, level="DEBUG")
     else:
         logger.add(sys.stdout, level="INFO")
-        logger.add(".party-debug.log", level="DEBUG", colorize=False, backtrace=True, diagnose=True)
+        logger.add(
+            ".party-debug.log",
+            level="DEBUG",
+            colorize=False,
+            backtrace=True,
+            diagnose=True,
+        )
 
 
 if __name__ == "__main__":

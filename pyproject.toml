@@ -31,6 +31,8 @@ yaspin = "^3.0.0"
 desert = "^2020.11.18"
 urllib3 = "<=2.0.0"
 python-slugify = "^8.0.1"
+merge-args = "^0.1.5"
+marshmallow-jsonschema = "^0.13.0"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"

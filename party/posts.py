@@ -6,7 +6,6 @@ import os
 from datetime import datetime
 from dataclasses import dataclass, field
 
-# from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import quote
 from urllib3.exceptions import ConnectTimeoutError
@@ -18,10 +17,16 @@ import desert
 from dateutil.parser import parse
 from loguru import logger
 from tqdm import tqdm
-from marshmallow import fields, EXCLUDE
+from marshmallow import fields, EXCLUDE, Schema
 
 from slugify import slugify
-from .common import StatusEnum, get_csluglify, etag_exists, add_etag
+from .common import (
+    StatusEnum,
+    get_csluglify,
+    etag_exists,
+    add_etag,
+    remove_etag,
+)
 
 
 @dataclass
@@ -35,7 +40,7 @@ class Attachment:
 
     name: Optional[str]
     path: Optional[str]
-    post_id: Optional[int]
+    post_id: Optional[int] = None
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
@@ -43,40 +48,56 @@ class Attachment:
             return
         self._filename = None
         self._post_title = ""
+        self._index = 0
 
     @property
     def base_name(self):
-        return self.name.split(".")[0]
+        """Generate base name without extension"""
+        return ".".join(self.name.split(".")[:-1])
 
     @property
     def extension(self):
+        """Find download file extenstion or pull from url if necessary"""
         if "." not in self.name[-6:]:
             hold = self.path.split("/").pop()
             self.name = f"{self.name}_{hold}"
-        ext = self.name.split(".")[1]
+        ext = self.name.split(".")[-1]
         return ext if ext != "jpe" else "jpg"
 
     @property
     def filename(self):
+        """Construct filename, for robust formatting"""
         if self._filename is None:
             if get_csluglify():
                 base = slugify(self.base_name)
             else:
                 base = self.base_name
             return f"{base}.{self.extension}"
-        else:
-            return self._filename
+        return self._filename
 
     @filename.setter
     def filename(self, filename):
+        """Manually set filename, for external mod"""
         self._filename = filename
 
     @property
+    def index(self):
+        """Added for file formatting, exists outside of the schema items"""
+        return self._index
+
+    @index.setter
+    def index(self, value):
+        """Added for file formatting, exists outside of the schema items"""
+        self._index = value
+
+    @property
     def post_title(self):
+        """Return the post title for robust formatting"""
         return self._post_title
 
     @post_title.setter
     def post_title(self, post_title):
+        """Used if slugify is on for file formatting"""
         if get_csluglify():
             self._post_title = slugify(post_title)
         else:
@@ -91,6 +112,7 @@ class Attachment:
         setattr(self, name, value)
 
     def __bool__(self):
+        """Just a check if the post was empty"""
         return bool(self.name)
 
     async def download(
@@ -109,9 +131,10 @@ class Attachment:
             if not full_check:
                 return StatusEnum.EXISTS
             start = os.stat(filename).st_size
-        headers = dict(
-            Range=f"bytes={start}-", referer="https://kemono.party/"
-        )
+        headers = {
+            "Range": f"bytes={start}-",
+            "referer": "https://kemono.party/",
+        }
         try:
             async with session.head(url, allow_redirects=True) as head:
                 if head.status == 429:
@@ -155,7 +178,11 @@ class Attachment:
                         fbar.close()
                     except aiohttp.client_exceptions.ClientPayloadError as err:
                         logger.debug(
-                            dict(error=err, filename=filename, url=self.path)
+                            {
+                                "error": err,
+                                "filename": filename,
+                                "url": self.path,
+                            }
                         )
                         logger.debug(self)
                         logger.debug(slugify(self.post_title))
@@ -169,7 +196,11 @@ class Attachment:
                             status = StatusEnum.ERROR_OTHER
                     except OSError as err:
                         logger.debug(
-                            dict(error=err, filename=filename, url=self.path)
+                            {
+                                "error": err,
+                                "filename": filename,
+                                "url": self.path,
+                            }
                         )
                         logger.debug(self)
                         fbar.close()
@@ -178,25 +209,38 @@ class Attachment:
                     status = StatusEnum.EXISTS
                 elif resp.status == 429:
                     status = StatusEnum.ERROR_429
+                    remove_etag(tag)
                 else:
                     logger.debug(
-                        dict(
-                            status=resp.status,
-                            filename=filename,
-                            url=resp.url,
-                            headers=resp.headers,
-                        )
+                        {
+                            "status": resp.status,
+                            "filename": filename,
+                            "url": resp.url,
+                            "headers": resp.headers,
+                        }
                     )
+                    remove_etag(tag)
                     status = StatusEnum.ERROR_OTHER
         except aiohttp.client_exceptions.TooManyRedirects as err:
-            logger.debug(dict(error=err, filename=filename, url=self.path))
+            logger.debug(
+                {"error": err, "filename": filename, "url": self.path}
+            )
             status = StatusEnum.ERROR_OTHER
         except ConnectTimeoutError as err:
             status = StatusEnum.ERROR_TIMEOUT
         return status
 
 
-AttachmentSchema = desert.schema_class(Attachment, meta=dict(unknown=EXCLUDE))
+class AttachmentSchema(Schema):
+    """Basic schema for Attachments"""
+
+    name: str = fields.Str()
+    path: str = fields.Str()
+    post_id: Optional[int] = fields.Int(required=False)
+    post_title: Optional[str] = fields.Str(required=False)
+    base_name: str = fields.Str(dump_only=True)
+    extension: str = fields.Str(dump_only=True)
+    filename: str = fields.Str(dump_only=True)
 
 
 @dataclass
@@ -235,15 +279,17 @@ class Post:
         collection = list(self.attachments)
         if include_files:
             collection.append(self.file)
-        for index, post in enumerate(filter(None, collection)):
-            post.post_id = self.id
-            post.post_title = self.title
-            post.index = index
-            yield post
+        for index, post_data in enumerate(filter(None, collection)):
+            if "name" in post_data:
+                post = Attachment(**post_data)
+                post.post_id = self.id
+                post.post_title = self.title
+                post.index = index
+                yield post
 
     def for_json(self):
         """Simplejson export method"""
         return PostSchema().dump(self)
 
 
-PostSchema = desert.schema_class(Post, meta=dict(unknown=EXCLUDE))
+PostSchema = desert.schema_class(Post, meta={"unknown": EXCLUDE})
