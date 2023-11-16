@@ -30,7 +30,7 @@ from .common import (
     load_etags,
     format_filenames,
 )
-from .posts import AttachmentSchema
+from .posts import AttachmentSchema, Attachment
 from .user import User
 
 if sys.platform == "win32":
@@ -245,38 +245,33 @@ async def download_async(
         connector=conn,
     ) as session:
         output = []
+        async def download(file, semaphore):
+            nonlocal workers
+            filename = f"{directory}/{file.filename}"
+            async with semaphore:
+                status = await file.download(
+                    session, filename, 0, full_check
+                )
+                if status == StatusEnum.ERROR_429 and workers > 1:
+                    workers = workers - 1
+                    logger.debug(f"429, decreasing workers to {workers}")
+                    await semaphore.acquire()  # decrement workers
+            if status == StatusEnum.ERROR_429:
+                status = file
+            else:
+                pbar.update(1)
+                write_etags(directory)
+            return status
+
         while len(files) != 0:
             semaphore = asyncio.Semaphore(workers)
-            # cworkers = workers
-
-            async def download(file):
-                nonlocal workers
-                filename = f"{directory}/{file.filename}"
-                async with semaphore:
-                    status = await file.download(
-                        session, filename, 0, full_check
-                    )
-                    if status == StatusEnum.ERROR_429 and workers > 1:
-                        workers = workers - 1
-                        logger.debug(f"429, decreasing workers to {workers}")
-                        await semaphore.acquire()  # decrement workers
-                if status == StatusEnum.ERROR_429:
-                    status = file
-                else:
-                    pbar.update(1)
-                    write_etags(directory)
-                return status
-
-            downloads = [download(f) for f in files]
+            downloads = [download(f, semaphore) for f in files]
             temp = await asyncio.gather(*downloads)
             files.clear()
             for stat in temp:
-                if stat not in [
-                    StatusEnum.EXISTS,
-                    StatusEnum.SUCCESS,
-                    StatusEnum.DUPLICATE,
-                ]:
-                    files.append(stat)  # need to handle other errors here
+                if isinstance(stat, Attachment):
+                    logger.debug(stat)
+                    files.append(stat)
                 else:
                     output.append(stat)
             if workers > 1:

@@ -14,6 +14,7 @@ import aiofiles
 import aiohttp
 import desert
 
+from aiohttp import ClientPayloadError, ServerTimeoutError
 from dateutil.parser import parse
 from loguru import logger
 from tqdm import tqdm
@@ -176,7 +177,7 @@ class Attachment:
                             )
                         fbar.refresh()
                         fbar.close()
-                    except aiohttp.client_exceptions.ClientPayloadError as err:
+                    except (ClientPayloadError, ServerTimeoutError) as err:
                         logger.debug(
                             {
                                 "error": err,
@@ -184,10 +185,8 @@ class Attachment:
                                 "url": self.path,
                             }
                         )
-                        logger.debug(self)
-                        logger.debug(slugify(self.post_title))
                         fbar.close()
-                        if retries > 2:
+                        if retries < 2:
                             status = await self.download(
                                 session, filename, retries + 1
                             )
@@ -226,8 +225,18 @@ class Attachment:
                 {"error": err, "filename": filename, "url": self.path}
             )
             status = StatusEnum.ERROR_OTHER
-        except ConnectTimeoutError as err:
-            status = StatusEnum.ERROR_TIMEOUT
+        except (ConnectTimeoutError, ServerTimeoutError) as err:
+            logger.debug(
+                {"error": err, "filename": filename, "url": self.path}
+            )
+            if retries < 2:
+                status = await self.download(
+                    session, filename, retries + 1
+                )
+            else:
+                status = StatusEnum.ERROR_TIMEOUT
+            if 'tag' in locals():
+                remove_etag(tag)
         return status
 
 
