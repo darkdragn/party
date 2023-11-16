@@ -61,6 +61,7 @@ class User:
                 and getattr(i, attr).lower() == search.lower()
             ):
                 return i
+        raise StopIteration
 
     @classmethod
     def get_user(cls, base_url: str, service: str, search: str):
