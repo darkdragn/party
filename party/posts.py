@@ -245,7 +245,7 @@ class AttachmentSchema(Schema):
 
     name: str = fields.Str()
     path: str = fields.Str()
-    post_id: Optional[int] = fields.Int(required=False)
+    post_id: Optional[str] = fields.Str(required=False)
     post_title: Optional[str] = fields.Str(required=False)
     base_name: str = fields.Str(dump_only=True)
     extension: str = fields.Str(dump_only=True)
@@ -260,7 +260,7 @@ class Post:
     content: str
     edited: Optional[datetime]
     # str necessary since some coomer returns string for id
-    id: int
+    id: str
     published: Optional[str]
     service: str
     shared_file: bool
@@ -269,7 +269,7 @@ class Post:
 
     attachments: Dict[str, str] = field(
         metadata=desert.metadata(
-            field=fields.Nested(AttachmentSchema, many=True)
+            field=fields.Nested(AttachmentSchema, many=True, unknown=EXCLUDE)
         )
     )
     embed: Dict[Optional[Any], Optional[Any]]

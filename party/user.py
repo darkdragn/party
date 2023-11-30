@@ -88,7 +88,7 @@ class User:
         Yields:
             Post
         """
-        schema = PostSchema()
+        schema = PostSchema(unknown=EXCLUDE)
         offset = 0
         while True:
             if offset != 0 and offset % 50 != 0:
@@ -109,7 +109,11 @@ class User:
                 if raw:
                     yield post
                 else:
-                    yield schema.load(post)
+                    try:
+                        yield schema.load(post)
+                    except:
+                        logger.debug(post)
+                        raise
 
     def for_json(self):
         """JSON convert method for simplejson
