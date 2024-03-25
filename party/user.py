@@ -188,3 +188,6 @@ class UserSchema(Schema):
         if self.context:
             return User(site=self.context["site"], **data)
         return User(**data)
+
+    class Meta:
+        unknown = EXCLUDE

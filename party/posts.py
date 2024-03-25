@@ -251,6 +251,9 @@ class AttachmentSchema(Schema):
     extension: str = fields.Str(dump_only=True)
     filename: str = fields.Str(dump_only=True)
 
+    class Meta:
+        unknown = EXCLUDE
+
 
 @dataclass
 class Post:
