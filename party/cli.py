@@ -227,7 +227,7 @@ async def download_async(
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=30)
     conn = aiohttp.TCPConnector(
-        limit=workers, limit_per_host=2, force_close=True
+        limit=workers, limit_per_host=4, force_close=True
     )
 
     async with aiohttp.ClientSession(
