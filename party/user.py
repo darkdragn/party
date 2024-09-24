@@ -44,7 +44,8 @@ class User:
     @staticmethod
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
-        resp = requests.get(f"{base_url}/api/v1/creators.txt", timeout=90)
+        resp = requests.get(f"{base_url}/api/v1/creators.txt", timeout=90,
+                            stream=True)
         return UserSchema(context={"site": base_url}, unknown=EXCLUDE).loads(
             resp.text, many=True
         )

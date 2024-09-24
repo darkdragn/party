@@ -14,7 +14,7 @@ import aiofiles
 import aiohttp
 import desert
 
-from aiohttp import ClientPayloadError, ServerTimeoutError
+from aiohttp import ClientPayloadError, ServerTimeoutError, ClientConnectorError
 from dateutil.parser import parse
 from loguru import logger
 from tqdm import tqdm
@@ -145,7 +145,8 @@ class Attachment:
                 except:
                     logger.debug(head.status)
                     logger.debug(head.headers)
-                    raise
+                    # raise
+                    return StatusEnum.ERROR_OTHER
                 if etag_exists(tag) and not os.path.exists(filename):
                     return StatusEnum.DUPLICATE
                 add_etag(tag)
@@ -177,7 +178,7 @@ class Attachment:
                             )
                         fbar.refresh()
                         fbar.close()
-                    except (ClientPayloadError, ServerTimeoutError) as err:
+                    except (ClientPayloadError, ServerTimeoutError, ClientConnectorError) as err:
                         logger.debug(
                             {
                                 "error": err,
@@ -225,7 +226,7 @@ class Attachment:
                 {"error": err, "filename": filename, "url": self.path}
             )
             status = StatusEnum.ERROR_OTHER
-        except (ConnectTimeoutError, ServerTimeoutError) as err:
+        except (ConnectTimeoutError, ServerTimeoutError, ClientConnectorError) as err:
             logger.debug(
                 {"error": err, "filename": filename, "url": self.path}
             )
