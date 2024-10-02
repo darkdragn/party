@@ -56,6 +56,7 @@ class StatusEnum(Enum):
     EXISTS = 5
     ERROR_OSERROR = 6
     DUPLICATE = 7
+    TOO_LARGE = 8
 
 
 def generate_token(size=16):

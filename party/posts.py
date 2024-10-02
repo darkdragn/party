@@ -14,7 +14,11 @@ import aiofiles
 import aiohttp
 import desert
 
-from aiohttp import ClientPayloadError, ServerTimeoutError, ClientConnectorError
+from aiohttp import (
+    ClientPayloadError,
+    ServerTimeoutError,
+    ClientConnectorError,
+)
 from dateutil.parser import parse
 from loguru import logger
 from tqdm import tqdm
@@ -122,6 +126,7 @@ class Attachment:
         filename: str = ".",
         retries: int = 0,
         full_check: bool = False,
+        cut_off: int = -1,
     ):
         """Async download handler"""
         status = StatusEnum.SUCCESS
@@ -138,6 +143,8 @@ class Attachment:
         }
         try:
             async with session.head(url, allow_redirects=True) as head:
+                size_in_mb = (int(head.headers["content-length"])/1024/1024) \
+                        if 'content-length' in head.headers else 1
                 if head.status == 429:
                     return StatusEnum.ERROR_429
                 try:
@@ -149,6 +156,12 @@ class Attachment:
                     return StatusEnum.ERROR_OTHER
                 if etag_exists(tag) and not os.path.exists(filename):
                     return StatusEnum.DUPLICATE
+                if (
+                    cut_off > 0
+                    and "content-length" in head.headers
+                    and cut_off < size_in_mb
+                ):
+                    return StatusEnum.TOO_LARGE
                 add_etag(tag)
 
             async with session.get(url, headers=headers) as resp:
@@ -178,7 +191,11 @@ class Attachment:
                             )
                         fbar.refresh()
                         fbar.close()
-                    except (ClientPayloadError, ServerTimeoutError, ClientConnectorError) as err:
+                    except (
+                        ClientPayloadError,
+                        ServerTimeoutError,
+                        ClientConnectorError,
+                    ) as err:
                         logger.debug(
                             {
                                 "error": err,
@@ -226,17 +243,19 @@ class Attachment:
                 {"error": err, "filename": filename, "url": self.path}
             )
             status = StatusEnum.ERROR_OTHER
-        except (ConnectTimeoutError, ServerTimeoutError, ClientConnectorError) as err:
+        except (
+            ConnectTimeoutError,
+            ServerTimeoutError,
+            ClientConnectorError,
+        ) as err:
             logger.debug(
                 {"error": err, "filename": filename, "url": self.path}
             )
             if retries < 2:
-                status = await self.download(
-                    session, filename, retries + 1
-                )
+                status = await self.download(session, filename, retries + 1)
             else:
                 status = StatusEnum.ERROR_TIMEOUT
-            if 'tag' in locals():
+            if "tag" in locals():
                 remove_etag(tag)
         return status
 

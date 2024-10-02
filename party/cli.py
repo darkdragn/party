@@ -92,6 +92,10 @@ ordered_short_option = typer.Option(
     "exclusive with post_id, post_title and file_format"
 )
 
+size_limit_option = typer.Option(
+    help="Allows for a size limit, in Megabytes, as a cut off for downloaded "
+    "files. Example: if 50, no files larger than 50Mb will be downloaded."
+)
 file_format_option = typer.Option(
     help="Used to set the output file format. "
     "Mutually exclusive with post_id, post_title and ordered short. "
@@ -117,6 +121,7 @@ def pull_user(
     post_title: Annotated[bool, post_title_option] = False,
     ordered_short: Annotated[bool, ordered_short_option] = False,
     file_format: Annotated[str, file_format_option] = "{ref.filename}",
+    size_limit: Annotated[int, size_limit_option] = -1,
     sluglify: bool = False,
     full_check: bool = False,
 ):
@@ -160,6 +165,7 @@ def pull_user(
         ordered_short=ordered_short,
         file_format=file_format,
         sluglify=sluglify,
+        size_limit=size_limit,
     )
 
     update_csluglify(sluglify)
@@ -209,7 +215,8 @@ def pull_user(
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(
-            download_async(pbar, site, directory, files, workers, full_check)
+            download_async(pbar, site, directory, files, workers, full_check,
+                           size_limit)
         )
     write_etags(directory)
     count = Counter(output)
@@ -223,6 +230,7 @@ async def download_async(
     files,
     workers: int = 10,
     full_check: bool = False,
+    size_limit: int = -1,
 ):
     """Basic AsyncIO implementation of downloads for files"""
     timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=30)
@@ -250,7 +258,7 @@ async def download_async(
             filename = f"{directory}/{file.filename}"
             async with semaphore:
                 status = await file.download(
-                    session, filename, 0, full_check
+                    session, filename, 0, full_check, size_limit
                 )
                 if status == StatusEnum.ERROR_429 and workers > 1:
                     workers = workers - 1
