@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote
 from urllib3.exceptions import ConnectTimeoutError
 
-import aiofiles
 import aiohttp
 import desert
 
@@ -19,9 +18,11 @@ from aiohttp import (
     ServerTimeoutError,
     ClientConnectorError,
 )
+from aiofile import async_open
+from caio import thread_aio_asyncio
 from dateutil.parser import parse
 from loguru import logger
-from tqdm import tqdm
+from tqdm.asyncio import tqdm
 from marshmallow import fields, EXCLUDE, Schema
 
 from slugify import slugify
@@ -138,9 +139,12 @@ class Attachment:
                 return StatusEnum.EXISTS
             start = os.stat(filename).st_size
         headers = {
-            "Range": f"bytes={start}-",
+            # "Range": f"bytes={start}-",
             "referer": "https://kemono.party/",
+            "Keep-Alive": "timeout=10, max=600",
         }
+        if start > 0:
+            headers['Range'] = f"bytes={start}-"
         try:
             async with session.head(url, allow_redirects=True) as head:
                 size_in_mb = (int(head.headers["content-length"])/1024/1024) \
@@ -176,12 +180,14 @@ class Attachment:
                         leave=False,
                     )
                     try:
-                        async with aiofiles.open(filename, "ab") as output:
-                            async for data in resp.content.iter_chunked(
-                                2**16
-                            ):
+                        threads_ctx = thread_aio_asyncio.AsyncioContext()
+
+                        async with async_open(filename, "ab",
+                                              context=threads_ctx) as output:
+                            async for data, _ in resp.content.iter_chunks():
                                 await output.write(data)
-                                fbar.update(len(data))
+                                if len(data) > 0:
+                                    fbar.update(len(data))
                         if "last-modified" in resp.headers and os.path.exists(
                             filename
                         ):
@@ -189,7 +195,7 @@ class Attachment:
                             os.utime(
                                 filename, (date.timestamp(), date.timestamp())
                             )
-                        fbar.refresh()
+                        # fbar.refresh()
                         fbar.close()
                     except (
                         ClientPayloadError,
@@ -204,9 +210,12 @@ class Attachment:
                             }
                         )
                         fbar.close()
-                        if retries < 2:
+                        if retries < 8:
+                            if "tag" in locals():
+                                remove_etag(tag)
                             status = await self.download(
-                                session, filename, retries + 1
+                                session, filename, retries + 1,
+                                full_check=True
                             )
                         else:
                             os.remove(filename)
@@ -252,7 +261,8 @@ class Attachment:
                 {"error": err, "filename": filename, "url": self.path}
             )
             if retries < 2:
-                status = await self.download(session, filename, retries + 1)
+                status = await self.download(session, filename, retries + 1,
+                                             full_check=True)
             else:
                 status = StatusEnum.ERROR_TIMEOUT
             if "tag" in locals():

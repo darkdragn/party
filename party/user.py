@@ -14,6 +14,7 @@ import requests
 import simplejson as json
 from loguru import logger
 from marshmallow import Schema, fields, post_load, EXCLUDE, pre_load
+from requests.adapters import Retry, HTTPAdapter
 
 # from .notes import populate_posts
 from .posts import Post, PostSchema
@@ -44,11 +45,14 @@ class User:
     @staticmethod
     def generate_users(base_url):
         """Generator to return all User objects from a base_url"""
-        resp = requests.get(f"{base_url}/api/v1/creators.txt", timeout=90,
-                            stream=True)
-        return UserSchema(context={"site": base_url}, unknown=EXCLUDE).loads(
-            resp.text, many=True
-        )
+        with requests.Session() as session:
+            retries = Retry(total=5, backoff_factor=0.2)
+            session.mount("https://", HTTPAdapter(max_retries=retries))
+            resp = session.get(f"{base_url}/api/v1/creators.txt", timeout=90,
+                                stream=True)
+            return UserSchema(context={"site": base_url}, unknown=EXCLUDE).loads(
+                resp.text, many=True
+            )
 
     @staticmethod
     def return_user(users, service: str, search: str, attr: str):
@@ -91,30 +95,33 @@ class User:
         """
         schema = PostSchema(unknown=EXCLUDE)
         offset = 0
-        while True:
-            if offset != 0 and offset % 50 != 0:
-                break
-            resp = requests.get(
-                self.url, params={"o": offset, "limit": 50}, timeout=60
-            )
-            logger.debug(resp.url)
-            try:
-                posts = resp.json()
-                if not posts:
+        with requests.Session() as session:
+            retries = Retry(total=5, backoff_factor=0.2)
+            session.mount("https://", HTTPAdapter(max_retries=retries))
+            while True:
+                if offset != 0 and offset % 50 != 0:
                     break
-            except requests.exceptions.JSONDecodeError as err:
-                print(resp.request.url)
-                raise err
-            for post in posts:
-                offset += 1
-                if raw:
-                    yield post
-                else:
-                    try:
-                        yield schema.load(post)
-                    except:
-                        logger.debug(post)
-                        raise
+                resp = session.get(
+                    self.url, params={"o": offset, "limit": 50}, timeout=60
+                )
+                logger.debug(resp.url)
+                try:
+                    posts = resp.json()
+                    if not posts:
+                        break
+                except requests.exceptions.JSONDecodeError as err:
+                    print(resp.request.url)
+                    raise err
+                for post in posts:
+                    offset += 1
+                    if raw:
+                        yield post
+                    else:
+                        try:
+                            yield schema.load(post)
+                        except:
+                            logger.debug(post)
+                            raise
 
     def for_json(self):
         """JSON convert method for simplejson

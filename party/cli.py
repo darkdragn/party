@@ -18,7 +18,7 @@ from loguru import logger
 from marshmallow_jsonschema import JSONSchema
 from merge_args import merge_args
 from prettytable import PrettyTable
-from tqdm import tqdm
+from tqdm.asyncio import tqdm
 from typing_extensions import Annotated
 from yaspin import yaspin
 
