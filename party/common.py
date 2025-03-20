@@ -58,6 +58,9 @@ class StatusEnum(Enum):
     DUPLICATE = 7
     TOO_LARGE = 8
 
+    def __format__(self, spec):
+        return f"{self.name}"
+
 
 def generate_token(size=16):
     """Generate a random token with hexadecimal digits"""

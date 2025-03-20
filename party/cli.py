@@ -5,6 +5,7 @@ import asyncio
 
 import os
 import re
+import socket
 import sys
 
 from typing import Counter
@@ -115,7 +116,7 @@ def pull_user(
     limit: Annotated[int, limit_option] = None,
     post_id: Annotated[bool, post_id_option] = None,
     exclude_extensions: Annotated[list[str], extension_option] = [],
-    workers: Annotated[int, worker_option] = 32,
+    workers: Annotated[int, worker_option] = 16,
     name: Annotated[str, name_option] = None,
     directory: Annotated[str, dir_option] = None,
     post_title: Annotated[bool, post_title_option] = False,
@@ -215,11 +216,12 @@ def pull_user(
     typer.secho(f"Downloading from user: {user.name}", fg=typer.colors.MAGENTA)
     with tqdm(total=len(files)) as pbar:
         output = asyncio.run(
-            download_async(pbar, site, directory, files, workers, full_check,
-                           size_limit)
+            download_async(
+                pbar, site, directory, files, workers, full_check, size_limit
+            )
         )
     write_etags(directory)
-    count = Counter(output)
+    count = Counter([f"{i}" for i in output])
     logger.info(f"Output status: {count}")
 
 
@@ -233,57 +235,43 @@ async def download_async(
     size_limit: int = -1,
 ):
     """Basic AsyncIO implementation of downloads for files"""
-    timeout = aiohttp.ClientTimeout(60 * 60, sock_connect=30)
+    timeout = aiohttp.ClientTimeout(sock_read=60, sock_connect=45)
     conn = aiohttp.TCPConnector(
-        limit=workers, limit_per_host=4, force_close=True
+        # limit=workers,
+        family=socket.AF_INET,
+        interleave=1,
+        limit_per_host=4,
+        force_close=True,
     )
 
     async with aiohttp.ClientSession(
         base_url,
-        timeout=timeout,
-        headers={
-            "Accept-Encoding": "gzip, deflate, br",
-            "Cache-Control": "no-cache",
-            "pragma": "no-cache",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 "
-            "Safari/537.36",
-        },
         cookies={"__ddg2": generate_token()},
         connector=conn,
+        # read_bufsize=2**14,
+        timeout=timeout,
     ) as session:
         output = []
+
         async def download(file, semaphore):
-            nonlocal workers
             filename = f"{directory}/{file.filename}"
             async with semaphore:
                 status = await file.download(
                     session, filename, 0, full_check, size_limit
                 )
-                if status == StatusEnum.ERROR_429 and workers > 1:
-                    workers = workers - 1
-                    logger.debug(f"429, decreasing workers to {workers}")
-                    await semaphore.acquire()  # decrement workers
-            if status == StatusEnum.ERROR_429:
-                status = file
-            else:
-                pbar.update(1)
-                write_etags(directory)
+                await asyncio.to_thread(pbar.update, 1)
             return status
 
-        while len(files) != 0:
-            semaphore = asyncio.Semaphore(workers)
-            downloads = [download(f, semaphore) for f in files]
-            temp = await asyncio.gather(*downloads)
-            files.clear()
-            for stat in temp:
-                if isinstance(stat, Attachment):
-                    logger.debug(stat)
-                    files.append(stat)
-                else:
-                    output.append(stat)
-            if workers > 1:
-                workers -= 1
+        tasks = []
+        semaphore = asyncio.Semaphore(workers)
+        logger.debug(workers)
+        async with asyncio.TaskGroup() as tg:
+            for f in files:
+                tasks.append(tg.create_task(download(f, semaphore)))
+
+        write_etags(directory)
+        for stat in [t.result() for t in tasks]:
+            output.append(stat)
         return output
 
 
@@ -521,6 +509,7 @@ def configure(
             colorize=False,
             backtrace=True,
             diagnose=True,
+            enqueue=True,
         )
 
 

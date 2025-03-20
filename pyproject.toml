@@ -34,6 +34,7 @@ merge-args = "^0.1.5"
 marshmallow-jsonschema = "^0.13.0"
 setuptools = "^75.8.0"
 aiofile = "^3.9.0"
+aiofiles = "^24.1.0"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.12.2"

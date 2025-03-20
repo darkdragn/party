@@ -48,11 +48,12 @@ class User:
         with requests.Session() as session:
             retries = Retry(total=5, backoff_factor=0.2)
             session.mount("https://", HTTPAdapter(max_retries=retries))
-            resp = session.get(f"{base_url}/api/v1/creators.txt", timeout=90,
-                                stream=True)
-            return UserSchema(context={"site": base_url}, unknown=EXCLUDE).loads(
-                resp.text, many=True
+            resp = session.get(
+                f"{base_url}/api/v1/creators.txt", timeout=90, stream=True
             )
+            return UserSchema(
+                context={"site": base_url}, unknown=EXCLUDE
+            ).loads(resp.text, many=True)
 
     @staticmethod
     def return_user(users, service: str, search: str, attr: str):

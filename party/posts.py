@@ -10,7 +10,9 @@ from typing import Any, Dict, Optional
 from urllib.parse import quote
 from urllib3.exceptions import ConnectTimeoutError
 
+import aiofiles
 import aiohttp
+import asyncio
 import desert
 
 from aiohttp import (
@@ -19,6 +21,7 @@ from aiohttp import (
     ClientConnectorError,
 )
 from aiofile import async_open
+from aiofiles import os as aos
 from caio import thread_aio_asyncio
 from dateutil.parser import parse
 from loguru import logger
@@ -134,21 +137,24 @@ class Attachment:
         headers = {}
         start = 0
         url = self.path + "?f=" + quote(self.name)
-        if os.path.exists(filename):
+        exists = await aos.path.exists(filename)
+        if exists:
             if not full_check:
                 return StatusEnum.EXISTS
-            start = os.stat(filename).st_size
+            stat = await aos.stat(filename)
+            start = stat.st_size
         headers = {
-            # "Range": f"bytes={start}-",
             "referer": "https://kemono.party/",
             "Keep-Alive": "timeout=10, max=600",
         }
-        if start > 0:
-            headers['Range'] = f"bytes={start}-"
+        total = 0
         try:
             async with session.head(url, allow_redirects=True) as head:
-                size_in_mb = (int(head.headers["content-length"])/1024/1024) \
-                        if 'content-length' in head.headers else 1
+                size_in_mb = (
+                    (int(head.headers["content-length"]) / 1024 / 1024)
+                    if "content-length" in head.headers
+                    else 1
+                )
                 if head.status == 429:
                     return StatusEnum.ERROR_429
                 try:
@@ -156,9 +162,8 @@ class Attachment:
                 except:
                     logger.debug(head.status)
                     logger.debug(head.headers)
-                    # raise
                     return StatusEnum.ERROR_OTHER
-                if etag_exists(tag) and not os.path.exists(filename):
+                if etag_exists(tag) and not exists:
                     return StatusEnum.DUPLICATE
                 if (
                     cut_off > 0
@@ -166,87 +171,8 @@ class Attachment:
                     and cut_off < size_in_mb
                 ):
                     return StatusEnum.TOO_LARGE
-                add_etag(tag)
-
-            async with session.get(url, headers=headers) as resp:
-                if 199 < resp.status < 300:
-                    fbar = tqdm(
-                        initial=start,
-                        desc=filename,
-                        total=int(resp.headers["content-length"]),
-                        unit="b",
-                        unit_divisor=1024,
-                        unit_scale=True,
-                        leave=False,
-                    )
-                    try:
-                        threads_ctx = thread_aio_asyncio.AsyncioContext()
-
-                        async with async_open(filename, "ab",
-                                              context=threads_ctx) as output:
-                            async for data, _ in resp.content.iter_chunks():
-                                await output.write(data)
-                                if len(data) > 0:
-                                    fbar.update(len(data))
-                        if "last-modified" in resp.headers and os.path.exists(
-                            filename
-                        ):
-                            date = parse(resp.headers["last-modified"])
-                            os.utime(
-                                filename, (date.timestamp(), date.timestamp())
-                            )
-                        # fbar.refresh()
-                        fbar.close()
-                    except (
-                        ClientPayloadError,
-                        ServerTimeoutError,
-                        ClientConnectorError,
-                    ) as err:
-                        logger.debug(
-                            {
-                                "error": err,
-                                "filename": filename,
-                                "url": self.path,
-                            }
-                        )
-                        fbar.close()
-                        if retries < 8:
-                            if "tag" in locals():
-                                remove_etag(tag)
-                            status = await self.download(
-                                session, filename, retries + 1,
-                                full_check=True
-                            )
-                        else:
-                            os.remove(filename)
-                            status = StatusEnum.ERROR_OTHER
-                    except OSError as err:
-                        logger.debug(
-                            {
-                                "error": err,
-                                "filename": filename,
-                                "url": self.path,
-                            }
-                        )
-                        logger.debug(self)
-                        fbar.close()
-                        status = StatusEnum.ERROR_OSERROR
-                elif resp.status == 416:
-                    status = StatusEnum.EXISTS
-                elif resp.status == 429:
-                    status = StatusEnum.ERROR_429
-                    remove_etag(tag)
-                else:
-                    logger.debug(
-                        {
-                            "status": resp.status,
-                            "filename": filename,
-                            "url": resp.url,
-                            "headers": resp.headers,
-                        }
-                    )
-                    remove_etag(tag)
-                    status = StatusEnum.ERROR_OTHER
+                await asyncio.to_thread(add_etag, tag)
+                total = int(head.headers["content-length"])
         except aiohttp.client_exceptions.TooManyRedirects as err:
             logger.debug(
                 {"error": err, "filename": filename, "url": self.path}
@@ -260,13 +186,102 @@ class Attachment:
             logger.debug(
                 {"error": err, "filename": filename, "url": self.path}
             )
-            if retries < 2:
-                status = await self.download(session, filename, retries + 1,
-                                             full_check=True)
-            else:
-                status = StatusEnum.ERROR_TIMEOUT
             if "tag" in locals():
-                remove_etag(tag)
+                await asyncio.to_thread(remove_etag, tag)
+
+        try:
+            tdata = start
+            count = 1
+            while True:
+                offset = 2**10 * 2**10 * 100 * count
+                offset = total if offset >= total else offset
+                headers["Range"] = f"bytes={tdata}-{offset}"
+                async with session.get(url, headers=headers) as resp:
+                    if 199 < resp.status < 300:
+                        # async with aiofiles.open(filename, "ab") as output:
+                        async with async_open(filename, "ab") as output:
+                            with tqdm(
+                                initial=tdata,
+                                desc=filename,
+                                total=total,
+                                unit="b",
+                                unit_divisor=1024,
+                                unit_scale=True,
+                                leave=False,
+                            ) as fbar:
+                                async for data in resp.content.iter_any():
+                                    await output.write(data)
+                                    await output.flush()
+                                    await asyncio.to_thread(
+                                        fbar.update, len(data)
+                                    )
+                                    tdata += len(data)
+                    elif resp.status == 416:
+                        status = StatusEnum.EXISTS
+                    elif resp.status == 429:
+                        status = StatusEnum.ERROR_429
+                        await asyncio.to_thread(remove_etag, tag)
+                    else:
+                        logger.debug(
+                            {
+                                "status": resp.status,
+                                "filename": filename,
+                                "url": resp.url,
+                                "headers": resp.headers,
+                            }
+                        )
+                        await asyncio.to_thread(remove_etag, tag)
+                        status = StatusEnum.ERROR_OTHER
+                if tdata >= total:
+                    if "last-modified" in resp.headers:
+                        lmod = await asyncio.to_thread(
+                            parse, resp.headers["last-modified"]
+                        )
+                        date = await asyncio.to_thread(lmod.timestamp)
+                        await asyncio.to_thread(
+                            os.utime, filename, (date, date)
+                        )
+                    break
+                count += 1
+        except (
+            ClientPayloadError,
+            ServerTimeoutError,
+            ClientConnectorError,
+        ) as err:
+            logger.debug(
+                {
+                    "error": err,
+                    "filename": filename,
+                    "url": self.path,
+                }
+            )
+            if retries < 8:
+                if "tag" in locals():
+                    await asyncio.to_thread(remove_etag, tag)
+                status = await self.download(
+                    session, filename, retries + 1, full_check=True
+                )
+            else:
+                await aos.remove(filename)
+                status = StatusEnum.ERROR_OTHER
+        except OSError as err:
+            logger.debug(
+                {
+                    "error": err,
+                    "filename": filename,
+                    "url": self.path,
+                }
+            )
+            logger.debug(self)
+            status = StatusEnum.ERROR_OSERROR
+        except Exception as err:
+            logger.debug(
+                {
+                    "error": err,
+                    "filename": filename,
+                    "url": self.path,
+                }
+            )
         return status
 
 
