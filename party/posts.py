@@ -136,7 +136,7 @@ class Attachment:
         status = StatusEnum.SUCCESS
         headers = {}
         start = 0
-        url = self.path + "?f=" + quote(self.name)
+        url = "/data/" + self.path + "?f=" + quote(self.name)
         exists = await aos.path.exists(filename)
         if exists:
             if not full_check:
@@ -144,7 +144,7 @@ class Attachment:
             stat = await aos.stat(filename)
             start = stat.st_size
         headers = {
-            "referer": "https://kemono.party/",
+            "referer": "https://coomer.su",
             "Keep-Alive": "timeout=10, max=600",
         }
         total = 0
@@ -161,6 +161,7 @@ class Attachment:
                     tag = head.headers["etag"]
                 except:
                     logger.debug(head.status)
+                    logger.debug(url)
                     logger.debug(head.headers)
                     return StatusEnum.ERROR_OTHER
                 if etag_exists(tag) and not exists:
@@ -304,7 +305,7 @@ class AttachmentSchema(Schema):
 class Post:
     """Post Schema/dataclass"""
 
-    added: str
+    added: Optional[str]
     content: str
     edited: Optional[datetime]
     # str necessary since some coomer returns string for id
