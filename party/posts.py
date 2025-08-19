@@ -50,6 +50,7 @@ class Attachment:
     name: Optional[str]
     path: Optional[str]
     post_id: Optional[int] = None
+    server: Optional[str] = None
 
     def __post_init__(self):
         # Fix for some filenames containing nested paths
@@ -136,7 +137,10 @@ class Attachment:
         status = StatusEnum.SUCCESS
         headers = {}
         start = 0
-        url = "/data/" + self.path + "?f=" + quote(self.name)
+        if self.server:
+            url = self.server + "/data" + self.path + "?f=" + quote(self.name)
+        else:
+            url = "/data" + self.path + "?f=" + quote(self.name)
         exists = await aos.path.exists(filename)
         if exists:
             if not full_check:
@@ -144,7 +148,7 @@ class Attachment:
             stat = await aos.stat(filename)
             start = stat.st_size
         headers = {
-            "referer": "https://coomer.su",
+            "referer": "https://coomer.ct",
             "Keep-Alive": "timeout=10, max=600",
         }
         total = 0
@@ -163,6 +167,7 @@ class Attachment:
                     logger.debug(head.status)
                     logger.debug(url)
                     logger.debug(head.headers)
+                    logger.debug(self.post_id)
                     return StatusEnum.ERROR_OTHER
                 if etag_exists(tag) and not exists:
                     return StatusEnum.DUPLICATE
@@ -306,13 +311,13 @@ class Post:
     """Post Schema/dataclass"""
 
     added: Optional[str]
-    content: str
+    substring: str
     edited: Optional[datetime]
     # str necessary since some coomer returns string for id
     id: str
     published: Optional[str]
     service: str
-    shared_file: bool
+    shared_file: Optional[bool]
     title: str
     user: str
 
@@ -321,7 +326,7 @@ class Post:
             field=fields.Nested(AttachmentSchema, many=True, unknown=EXCLUDE)
         )
     )
-    embed: Dict[Optional[Any], Optional[Any]]
+    embed: Optional[Dict[Optional[Any], Optional[Any]]]
     file: Dict[str, str] = field(
         metadata=desert.metadata(field=fields.Nested(AttachmentSchema))
     )

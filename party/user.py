@@ -99,11 +99,12 @@ class User:
         with requests.Session() as session:
             retries = Retry(total=5, backoff_factor=0.2)
             session.mount("https://", HTTPAdapter(max_retries=retries))
+            session.headers = {"Accept": "text/css"}
             while True:
                 if offset != 0 and offset % 50 != 0:
                     break
                 resp = session.get(
-                    self.url, params={"o": offset, "limit": 50}, timeout=60
+                    self.url, params={"o": offset}, timeout=60
                 )
                 logger.debug(resp.url)
                 try:
@@ -115,6 +116,8 @@ class User:
                     raise err
                 for post in posts:
                     offset += 1
+                    logger.debug(resp.content)
+                    logger.debug(resp.status_code)
                     if raw:
                         yield post
                     else:
@@ -167,7 +170,7 @@ class User:
     @property
     def url(self) -> str:
         """URL builder for self"""
-        return f"{self.site}/api/v1/{self.service}/user/{self.id}"
+        return f"{self.site}/api/v1/{self.service}/user/{self.id}/posts"
 
 
 class UserSchema(Schema):

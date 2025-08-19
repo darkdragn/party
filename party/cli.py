@@ -58,7 +58,7 @@ site_option = typer.Option(
     "-s",
     "--site",
     help="Specify a site to use;"
-    " Ex(kemono.party,coomer.party,kemono.su,coomer.su)",
+    " Ex(kemono.party,coomer.party,kemono.cr,coomer.cr)",
 )
 
 extension_option = typer.Option(
@@ -277,14 +277,14 @@ async def download_async(
 
 @APP.command()
 @merge_args(pull_user)
-def kemono(ctx: typer.Context, site: str = "https://kemono.su", **kwargs):
+def kemono(ctx: typer.Context, site: str = "https://kemono.cr", **kwargs):
     """Quick download command for kemono.party"""
     pull_user(**ctx.params)
 
 
 @APP.command()
 @merge_args(pull_user)
-def coomer(ctx: typer.Context, site: str = "https://coomer.su", **kwargs):
+def coomer(ctx: typer.Context, site: str = "https://coomer.cr", **kwargs):
     """Convenience command for running against coomer, services[fansly,onlyfans]"""
     pull_user(**ctx.params)
 
@@ -311,11 +311,11 @@ def search(
 ):  # pylint: disable=W0102, R0913, R0914
     """Search function"""
     if site == "kemono":
-        base_url = "https://kemono.su"
+        base_url = "https://kemono.cr"
     elif site == "coomer":
         base_url = "https://coomer.party"
-    elif site == "coomer.su":
-        base_url = "https://coomer.su"
+    elif site == "coomer.cr":
+        base_url = "https://coomer.cr"
     else:
         logger.info(f"Invalid site: {site}. Use 'kemono' or 'coomer'.")
         return
@@ -467,7 +467,7 @@ def dump_posts(
     service: Annotated[str, service_arg],
     user_id: Annotated[str, userid_arg],
     name: str,
-    site: str = "https://kemono.su",
+    site: str = "https://kemono.cr",
     limit: Annotated[int, limit_option] = None,
     directory: bool = True,
 ):
